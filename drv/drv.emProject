@@ -120,6 +120,15 @@
     <file file_name="ota.c" />
     <file file_name="../ota.h" />
   </project>
+  <project Name="00drv_attestation">
+    <configuration
+      Name="Common"
+      project_dependencies="00bsp_partition(bsp);00crypto_sha256(crypto)"
+      project_directory="attestation"
+      project_type="Library" />
+    <file file_name="attestation.c" />
+    <file file_name="../attestation.h" />
+  </project>
   <project Name="00drv_pid">
     <configuration
       Name="Common"
