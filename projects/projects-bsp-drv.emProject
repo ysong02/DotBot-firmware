@@ -1187,7 +1187,7 @@
   <project Name="01drv_attestation">
     <configuration
       Name="Common"
-      project_dependencies="00drv_attestation(drv);00bsp_partition(bsp);00crypto_sha256(crypto);"
+      project_dependencies="00drv_attestation(drv);00bsp_partition(bsp);00crypto_sha256(crypto);00crypto_ed25519(crypto)"
       project_directory="01drv_attestation"
       project_type="Executable" />
     <configuration Name="Debug" linker_printf_fp_enabled="Float" />
