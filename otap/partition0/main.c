@@ -20,10 +20,12 @@
 
 #include "ota.h"
 #include "partition.h"
-
+#include "sha256.h"
+#include "attestation.h"
 //=========================== defines ==========================================
 
 #define TIMER_DEV (0)
+//#define HASH_LEN (32U)
 
 typedef struct {
     db_partitions_table_t table;
@@ -35,6 +37,13 @@ typedef struct {
 //=========================== variables ========================================
 
 static application_vars_t _app_vars = { 0 };
+//static db_partitions_table_t _table = {0};
+
+const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8] = {0xa2, 0x9f, 0x62, 0xa4, 0xc6, 0xcd, 0xaa, 0xe5};
+uint8_t token_buf[MAX_TOKEN];
+uint8_t token_size;
+
+
 
 //=========================== callbacks ========================================
 
@@ -44,7 +53,7 @@ static void _radio_callback(uint8_t *pkt, uint8_t len) {
 }
 
 static void _toggle_led(void) {
-    db_gpio_toggle(&db_led1);
+   db_gpio_toggle(&db_led1);
 }
 
 //=========================== private ==========================================
@@ -59,28 +68,36 @@ static const db_ota_conf_t _ota_config = {
     .reply = _ota_reply,
 };
 
+
+
 //================================ main ========================================
 
 int main(void) {
     printf("Booting on partition %d (Build: %s)\n", DOTBOT_PARTITION, DOTBOT_BUILD_TIME);
-
     db_ota_init(&_ota_config);
-
     db_radio_init(&_radio_callback, DB_RADIO_BLE_1MBit);
     db_radio_set_frequency(8);
     db_radio_rx();
-
     db_gpio_init(&db_led1, DB_GPIO_OUT);
     db_gpio_set(&db_led1);
     db_timer_init(TIMER_DEV);
-    db_timer_set_periodic_ms(TIMER_DEV, 0, 100, &_toggle_led);
+    db_timer_set_periodic_ms(TIMER_DEV,0, 100, &_toggle_led);
+    
+    //uint8_t hash[HASH_LEN] = {0};
+    //edhoc_initial_attest_get_hashed_image(&_table, hash);
 
+    //__NOP();
+    
+    uint8_t status = 0;
+    status = edhoc_initial_attest_signed_token(challenge, token_buf, &token_size);
+    printf("status: %d", status);
     while (1) {
         __WFE();
-
         if (_app_vars.packet_received) {
             _app_vars.packet_received = false;
             db_ota_handle_message(_app_vars.message_buffer);
         }
     }
+
+
 }
