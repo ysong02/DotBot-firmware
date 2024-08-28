@@ -216,7 +216,7 @@ uint8_t cborencoder_put_text(uint8_t *buffer, const char *text, uint8_t text_len
 /**
  * @brief get the encoding format of evidence
  */
-static attestation_status_t edhoc_initial_attest_encoding_evidence(uint8_t *buffer, evidence_t *evidence, uint8_t *token_size){
+static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer, evidence_t *evidence, uint8_t *token_size){
     *token_size += cborencoder_put_map(&buffer[*token_size], 1); //changeable, one evidence element
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_KEY); 
     *token_size += cborencoder_put_array(&buffer[*token_size], 1); // changeable, one file in the array
@@ -230,11 +230,6 @@ static attestation_status_t edhoc_initial_attest_encoding_evidence(uint8_t *buff
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate sha256
     *token_size += cborencoder_put_bytes(&buffer[*token_size], evidence->file.hash_image, HASH_LEN);
     if (*token_size != 0){
-        for (uint8_t i = 0; i<*token_size; i++){
-            printf("%02x", token_buf[i]);
-        }
-        printf("\n");
-        printf("here is the evidence, should follow by signature\n");
         return ATTESTATION_SUCCESS;
     }
     else{
@@ -246,12 +241,10 @@ static attestation_status_t edhoc_initial_attest_encoding_evidence(uint8_t *buff
 /**
  * @brief get the encoding format 
  */
-static attestation_status_t edhoc_initial_attest_encoding_measurements(uint8_t *buffer, measurements_claim_t *measurements, uint8_t *token_size){
+static attestation_status_t edhoc_initial_attest_encode_measurements(uint8_t *buffer, measurements_claim_t *measurements, uint8_t *token_size){
     *token_size += cborencoder_put_map(&buffer[*token_size], 5);  //fixed, 5 elements in measurements claim
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_ID_KEY);
     *token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.tag_id, strlen(measurements->coswid.tag_id));
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_VERSION_KEY);
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], measurements->coswid.tag_version); //changeable when the attestation service is recalled, fix to 0 for onboarding check
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_SOFTWARE_NAME_KEY);
     *token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.software_name, strlen(measurements->coswid.software_name));
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_KEY);
@@ -260,14 +253,12 @@ static attestation_status_t edhoc_initial_attest_encoding_measurements(uint8_t *
     *token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.entity.entity_name, strlen(measurements->coswid.entity.entity_name));
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ROLE);
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate tag creator 
+    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_VERSION_KEY);
+    *token_size += cborencoder_put_unsigned(&buffer[*token_size], measurements->coswid.tag_version); //changeable when the attestation service is recalled, fix to 0 for onboarding check
+    
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_EVIDENCE_KEY); 
      
     if (*token_size != 0){
-        for (uint8_t i = 0; i<*token_size; i++){
-            printf("%02x", token_buf[i]);
-        }
-        printf("\n");
-        printf("here is till measurements, should follow by evidence\n");
         return ATTESTATION_SUCCESS;
     }
     else{
@@ -279,7 +270,7 @@ static attestation_status_t edhoc_initial_attest_encoding_measurements(uint8_t *
 /**
  * @brief get the encoding format 
  */
-static attestation_status_t edhoc_initial_attest_encoding_token(uint8_t *buffer, token_t *token, uint8_t *token_size){
+static attestation_status_t edhoc_initial_attest_encode_token(uint8_t *buffer, token_t *token, uint8_t *token_size){
 //transfer the input to CBOR
 
     *token_size += cborencoder_put_map(&buffer[*token_size], 3);  //fixed
@@ -293,11 +284,6 @@ static attestation_status_t edhoc_initial_attest_encoding_token(uint8_t *buffer,
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_COAP_CONTENT_FORMATS_SWID);
 
     if (*token_size != 0){
-        for (uint8_t i = 0; i<*token_size; i++){
-            printf("%02x", token_buf[i]);
-        }
-        printf("\n");
-        printf("here is till token payload, content format id 258, should then follow by measurements claim\n");
         return ATTESTATION_SUCCESS;
     }
     else{
@@ -306,24 +292,19 @@ static attestation_status_t edhoc_initial_attest_encoding_token(uint8_t *buffer,
 
 }
 
-static attestation_status_t edhoc_initial_attest_encoding_cose_headers(uint8_t *token_buf, uint8_t *token_size){
+static attestation_status_t edhoc_initial_attest_encode_cose_headers(uint8_t *token_buf, uint8_t *token_size, uint8_t *protected_header_start, uint8_t *protected_header_end){
 
     token_buf[0] = 0xd2;  //fixed, COSE_Sign1 tag
     token_buf[1] = 0x84;  //fixed, 4 elements in the array
     token_buf[2] = 0x43;  //changeable, 3 bytes for protected header
     *token_size += 3;
-
+    *protected_header_start = *token_size;
     *token_size += cborencoder_put_map(&token_buf[*token_size], 1);  //fixed, one element in protected header
     *token_size += cborencoder_put_unsigned(&token_buf[*token_size], IANA_COSE_HEADER_PARAMETERS_ALG);
     *token_size += cborencoder_put_negative(&token_buf[*token_size], -8);  //changeable, now we use EdDSA which is -8
+    *protected_header_end = *token_size;
     *token_size += cborencoder_put_map(&token_buf[*token_size], 0); //changeable, currently nothing in unprotected header 
     if (*token_size != 0){
-
-      for (uint8_t i = 0; i<*token_size; i++){
-              printf("%02x", token_buf[i]);
-          }
-          printf("\n");
-          printf("here is till cose headers {}, should follow by token payload\n");
         return ATTESTATION_SUCCESS;
     }
     else{
@@ -372,7 +353,7 @@ static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evid
         return ATTESTATION_ERROR_EVIDENCE;
     }
     else{
-        return edhoc_initial_attest_encoding_evidence(token_buf, evidence, token_size);
+        return edhoc_initial_attest_encode_evidence(token_buf, evidence, token_size);
     }
 }
 
@@ -391,7 +372,7 @@ static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements
         return ATTESTATION_ERROR_MEASUREMENTS;
     }
     else{
-        return edhoc_initial_attest_encoding_measurements(token_buf, claim, token_size);
+        return edhoc_initial_attest_encode_measurements(token_buf, claim, token_size);
     }
 
 }
@@ -408,7 +389,7 @@ static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t ch
     }
     else{
         
-        return edhoc_initial_attest_encoding_token(token_buf, token, token_size);
+        return edhoc_initial_attest_encode_token(token_buf, token, token_size);
     }
 
 }
@@ -416,9 +397,31 @@ static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t ch
 /**
  * @brief get the signature and transfer it to CBOR
  */
-static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, const uint8_t *data, uint8_t data_size, const uint8_t *private_key, const uint8_t *public_key, uint8_t *token_buf, uint8_t *token_size) {
+static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, const uint8_t *data, uint8_t data_size, const uint8_t *private_key, const uint8_t *public_key, uint8_t *token_buf, uint8_t *token_size, uint8_t *protected_header_start, uint8_t *protected_header_end){
 //using ed25519
-    size_t signature_len = crypto_ed25519_sign (signature, (const uint8_t *)data, data_size, private_key, public_key);
+    //construct sig_signature structure
+    uint8_t sig_structure = 0;
+    uint8_t sig_structure_cbor[MAX_TOKEN];
+    sig_structure += cborencoder_put_array(&sig_structure_cbor[sig_structure], 4); //fixed, 4 elements in the array
+    sig_structure += cborencoder_put_text(&sig_structure_cbor[sig_structure], "Signature1", strlen("Signature1")); //fixed, use COSE_Sign1
+
+    //get protected header in bytes
+    uint8_t protected_header_length = *protected_header_end - *protected_header_start;
+    uint8_t protected_header[protected_header_length];
+    memcpy(protected_header, &token_buf[*protected_header_start], protected_header_length);
+    sig_structure += cborencoder_put_bytes(&sig_structure_cbor[sig_structure], protected_header, protected_header_length); //protected header in bytes
+    sig_structure += cborencoder_put_bytes(&sig_structure_cbor[sig_structure], NULL, 0); //external_aad
+
+    //add payload to sig_structure
+    memcpy(&sig_structure_cbor[sig_structure], data, data_size);
+    printf("sig_structure is: \n");
+    for (uint8_t i =0; i < sig_structure+data_size; i++){
+    printf("%02x", sig_structure_cbor[i]);
+    }
+    printf("\n");
+
+    //generate signature
+    size_t signature_len = crypto_ed25519_sign (signature, sig_structure_cbor, sig_structure+data_size, private_key, public_key);
     if (signature_len != ED25519_SIGNATURE_LEN){
         return ATTESTATION_ERROR_SIGNATURE;
     } else {
@@ -429,11 +432,6 @@ static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, c
           printf("%02x", signature[i]);
         }
     printf("\n");
-    for (uint8_t i = 0; i<*token_size; i++){
-          printf("%02x", token_buf[i]);
-        }
-    printf("\n");
-    printf("here is the signature generation, the end of token\n");
     return 0;
 }
 
@@ -443,23 +441,29 @@ attestation_status_t edhoc_initial_attest_signed_token(const uint8_t *challenge,
 
 //the whole signed token size
 *token_size = 0;
-
+uint8_t protected_header_start = 0;
+uint8_t protected_header_end = 0;
 //headers
-status = edhoc_initial_attest_encoding_cose_headers(token_buf, token_size);
+status = edhoc_initial_attest_encode_cose_headers(token_buf, token_size, &protected_header_start, &protected_header_end);
 if (status!=0){
     printf("error: %d\n", status);
     return status;
 }
 uint8_t payload_start = *token_size;
+uint8_t payload_size = 0;
+uint8_t pre_token_buf[MAX_TOKEN];
 
-//payload
-status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, token_buf, token_size);
-status = edhoc_initial_attest_measurements_cbor(&claim, token_buf, token_size);
+//payload encoded in CBOR to be a bstr
+status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
+status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
 status = edhoc_initial_attest_get_hashed_image(&_table, hash);
-status = edhoc_initial_attest_evidence_cbor(&evidence, token_buf, token_size, hash);
+status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash);
+
+//payload as a bstr to be encoded
+*token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
 
 //signature
-status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *token_size-payload_start, private_key, public_key, token_buf, token_size);
+status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *token_size-payload_start, private_key, public_key, token_buf, token_size, &protected_header_start, &protected_header_end);
 if (status!=0){
     return ATTESTATION_ERROR_SIGNATURE;
 }

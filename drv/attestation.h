@@ -30,7 +30,7 @@ typedef enum {
            
 //================================ functions =================================
 
-attestation_status_t edhoc_initial_attest_signed_token(const uint8_t *challenge, uint8_t *token_buf, uint8_t *token_size);
+attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8], uint8_t *token_buf, uint8_t *token_size);
 /**
  * @brief generate a COSE_Sign1 token 
  */
