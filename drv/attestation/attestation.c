@@ -315,17 +315,17 @@ static attestation_status_t edhoc_initial_attest_encode_cose_headers(uint8_t *to
 /**
  * @brief get the hashed image value on active partition
  */
-static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions_table_t* partition_table, uint8_t hash[HASH_LEN]){
+static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions_table_t* partition_table, uint8_t hash[HASH_LEN], uint32_t *image_size){
     
     db_read_partitions_table(partition_table);
 
     //find the start of image, the size of the image
     uint32_t image_address = partition_table->partitions[partition_table->active_image].address;
-    uint32_t image_size = partition_table->partitions[partition_table->active_image].size;
+    *image_size = partition_table->partitions[partition_table->active_image].size;
 
     // initialize crypto 
     crypto_sha256_init();
-    crypto_sha256_update((uint8_t *)image_address, image_size);
+    crypto_sha256_update((uint8_t *)image_address, *image_size);
 
      //finalize sha256
     crypto_sha256(hash);  
@@ -344,11 +344,11 @@ static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions
 /**
  * @brief fill measurements Claim: using swid+cbor
  */
-static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evidence, uint8_t *token_buf, uint8_t *token_size, uint8_t hash[HASH_LEN]){
-    strcpy(evidence->file.fs_name, "partition0-nrf52840dk.bin");
+static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evidence, uint8_t *token_buf, uint8_t *token_size, uint8_t hash[HASH_LEN], uint32_t *image_size){
+    strcpy(evidence->file.fs_name, "01drv_attestation-nrf52840dk.bin");
     evidence->file.hash_alg = 1;  //fixed, sha256
     memcpy(evidence->file.hash_image, hash, HASH_LEN);
-    evidence->file.size = 1111111;  //!!!!!!!!!!!!!!TBC how to get the size of file in DotBot!!!!!!!!!!!!!!!
+    evidence->file.size = *image_size;  //!!!!!!!!!!!!!!TBC how to get the size of file in DotBot!!!!!!!!!!!!!!!
     if (evidence == NULL){
         return ATTESTATION_ERROR_EVIDENCE;
     }
@@ -452,12 +452,13 @@ if (status!=0){
 uint8_t payload_start = *token_size;
 uint8_t payload_size = 0;
 uint8_t pre_token_buf[MAX_TOKEN];
+uint32_t image_size = 0;
 
 //payload encoded in CBOR to be a bstr
 status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
 status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
-status = edhoc_initial_attest_get_hashed_image(&_table, hash);
-status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash);
+status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
+status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash, &image_size);
 
 //payload as a bstr to be encoded
 *token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
