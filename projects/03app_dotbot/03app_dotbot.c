@@ -14,6 +14,7 @@
 
 #include <nrf.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
@@ -28,6 +29,14 @@
 #include "rgbled_pwm.h"
 #include "timer.h"
 #include "log_flash.h"
+#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
+#include "attestation.h"
+#include "partition.h"
+#include "sha256.h"
+
+#ifdef CRYPTO_PSA
+extern void mbedtls_memory_buffer_alloc_init(uint8_t *buf, size_t len);
+#endif
 
 //=========================== defines ==========================================
 
@@ -52,6 +61,7 @@
 #define DB_ANGULAR_SPEED_FACTOR (30)   ///< Constant applied to the normalized angle to target error
 #define DB_ANGULAR_SIDE_FACTOR  (1)    ///< Angular side factor
 #endif
+#define EDHOC_INITIATOR_INDEX 0
 
 typedef struct {
     uint32_t                 ts_last_packet_received;            ///< Last timestamp in microseconds a control packet was received
@@ -69,6 +79,11 @@ typedef struct {
     uint8_t                  lh2_update_counter;                 ///< Counter used to track when lh2 data were received and to determine if an advertizement packet is needed
     uint64_t                 device_id;                          ///< Device ID of the DotBot
     db_log_dotbot_data_t     log_data;
+    // edhoc stuff
+    bool                     update_edhoc;                       ///< Whether EDHOC data must be processed
+    bool                     gateway_authenticated;              ///< Whether the gateway has been authenticated
+    EdhocMessageBuffer       edhoc_buffer;                       ///< Internal buffer to store received but not yet handled edhoc messages
+    uint8_t                  prk_out[SHA256_DIGEST_LEN];
 } dotbot_vars_t;
 
 //=========================== variables ========================================
@@ -85,6 +100,34 @@ static const db_rgbled_pwm_conf_t rgbled_pwm_conf = {
     }
 };
 #endif
+
+// for EDHOC
+static const uint8_t CRED_I[1][100] = {
+  {0xa2, 0x02, 0x50, 0x85, 0xc1, 0xec, 0x21, 0xf2, 0x6f, 0x41, 0xe7, 0xa3, 0x0a, 0x8a, 0x87, 0xbd, 0xbe, 0xf2, 0x3c, 0x08, 0xa1, 0x01, 0xa5, 0x01, 0x02, 0x02, 0x41, 0x01, 0x20, 0x01, 0x21, 0x58, 0x20, 0x52, 0x7c, 0x4d, 0x4c, 0x08, 0x9f, 0x9f, 0xe3, 0x33, 0x56, 0xaa, 0x97, 0xa1, 0xd6, 0x72, 0xda, 0x32, 0xc1, 0x60, 0x08, 0x24, 0x4f, 0xef, 0x37, 0xf0, 0x71, 0x54, 0xe0, 0x70, 0xe6, 0x6d, 0x1f, 0x22, 0x58, 0x20, 0x32, 0xe4, 0x6c, 0x45, 0xc4, 0xdd, 0xcb, 0x6d, 0x6c, 0x52, 0x4f, 0x37, 0x9d, 0x57, 0x15, 0x9d, 0x64, 0x2d, 0xd7, 0xf0, 0x27, 0x9c, 0x45, 0x50, 0xe3, 0x44, 0x48, 0xda, 0xc4, 0x19, 0x53, 0x2c},
+  //{0xa2, 0x02, 0x50, 0x4f, 0x2c, 0xed, 0x1b, 0x29, 0x17, 0x4d, 0xfe, 0x91, 0x55, 0x18, 0xc7, 0x23, 0x4d, 0x2c, 0xe3, 0x08, 0xa1, 0x01, 0xa5, 0x01, 0x02, 0x02, 0x41, 0x02, 0x20, 0x01, 0x21, 0x58, 0x20, 0xed, 0x47, 0xd7, 0xb6, 0xd0, 0x0c, 0x41, 0x4b, 0xa9, 0xfe, 0x1c, 0x9e, 0x6d, 0x2b, 0x07, 0x85, 0x45, 0x14, 0x36, 0x76, 0x6d, 0x5c, 0x0e, 0x65, 0xf3, 0xd7, 0xe3, 0x3b, 0x0d, 0x35, 0x4a, 0xd6, 0x22, 0x58, 0x20, 0x44, 0x3e, 0xda, 0x79, 0x2f, 0x81, 0x88, 0x44, 0xc8, 0x86, 0xbd, 0x1e, 0xc6, 0xfa, 0x0b, 0xd3, 0x61, 0xf8, 0xaa, 0xc9, 0xa8, 0xbc, 0xc2, 0x28, 0x65, 0x02, 0xaa, 0x9e, 0xb9, 0xea, 0xbb, 0xf4},
+};
+static const BytesP256ElemLen I[1] = {
+  {0x1f, 0x7e, 0x4a, 0xe4, 0x29, 0x3a, 0x34, 0x8b, 0xf2, 0xb1, 0x36, 0x5c, 0xe0, 0x98, 0xaa, 0x49, 0xc2, 0x07, 0xbd, 0x1b, 0xa7, 0xdd, 0xde, 0xcd, 0xfa, 0xd6, 0x0c, 0xad, 0xe8, 0x2e, 0x9e, 0xf5},
+  //{0x3c, 0xa8, 0x54, 0xbf, 0xaa, 0x90, 0xda, 0x16, 0xe1, 0xa8, 0xfa, 0xcc, 0x0c, 0xd8, 0x34, 0x92, 0x7e, 0xc0, 0xb3, 0x19, 0x74, 0x8b, 0xb4, 0x79, 0xf1, 0x31, 0x6b, 0x8d, 0x38, 0x30, 0x74, 0xa8},
+};
+
+// used during execution of EDHOC
+static CredentialC cred_i = {0}, fetched_cred_r = {0};
+static IdCred id_cred_r = {0};
+static EdhocInitiator initiator = {0};
+static EdhocMessageBuffer message_1 = {0};
+static uint8_t c_r = 0;
+static EdhocMessageBuffer message_2 = {0};
+static EdhocMessageBuffer message_3 = {0};
+
+// used druing execution of attestation
+//test ead3 later
+static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
+
+//usde during execution of ead_3
+const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8] = {0xa2, 0x9f, 0x62, 0xa4, 0xc6, 0xcd, 0xaa, 0xe5}; //should receive from the verifier
+uint8_t token_buf[MAX_TOKEN];
+uint8_t token_size;
 
 //=========================== prototypes =======================================
 
@@ -160,12 +203,55 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
                 _dotbot_vars.control_mode = ControlAuto;
             }
         } break;
+        case DB_PROTOCOL_EDHOC_MSG:
+        {
+            uint8_t buffer_len = len - sizeof(protocol_header_t) - 2; // why -2?
+            memcpy(_dotbot_vars.edhoc_buffer.content, cmd_ptr, buffer_len);
+            _dotbot_vars.edhoc_buffer.len = buffer_len;
+            _dotbot_vars.update_edhoc = true;
+        } break;
         default:
             break;
     }
 }
+//===========================private function for attestation ================
+uint8_t cborencoder_put_array(uint8_t *buffer, uint8_t elements) {
+    uint8_t ret = 0;
+
+    if (elements > 15) {
+        return 0;
+    }
+
+    buffer[ret++] = (0x80 | elements);
+    return ret;
+}
+
+uint8_t cborencoder_put_unsigned(uint8_t *buffer, unsigned long value) {
+    uint8_t ret = 0;
+
+    if (value <= 0x17){
+        buffer[ret++] = value;
+    } else if (value <= 0xff){
+        buffer[ret++] = 0x18;
+        buffer[ret++] = value;
+    } else if (value <= 0xffff)
+    {
+        buffer[ret++] = 0x19;
+        buffer[ret++] = (value >> 8)& 0xff;
+        buffer[ret++] = value & 0xff;
+    } else if (value <= 0xffffffff){
+        buffer[ret++] = 0x1a;
+        buffer[ret++] = (value >> 24)& 0xff;
+        buffer[ret++] = (value >> 16)& 0xff;
+        buffer[ret++] = (value >> 8) & 0xff;
+        buffer[ret++] = value & 0xff;
+    }
+
+    return ret;
+}
 
 //=========================== main =============================================
+
 
 int main(void) {
     db_board_init();
@@ -199,8 +285,145 @@ int main(void) {
     db_lh2_init(&_dotbot_vars.lh2, &db_lh2_d, &db_lh2_e);
     db_lh2_start();
 
+    //yuxuan: i don't know what it is for; but will have error without it
+    uint8_t buffer[4096 * 2] = {0};
+    mbedtls_memory_buffer_alloc_init(buffer, 4096 * 2);
+
+    puts("Initializing EDHOC and EAD attestation");
+    credential_new(&cred_i, CRED_I[EDHOC_INITIATOR_INDEX], sizeof(CRED_I[EDHOC_INITIATOR_INDEX]) / sizeof(CRED_I[EDHOC_INITIATOR_INDEX][0]));
+    initiator_new(&initiator);
+
+    _dotbot_vars.gateway_authenticated = false;
+    int edhoc_state = 0;
+
+    printf("Dotbot initialized.\n");
+    printf("Gateway NOT authenticated.\n");
+
     while (1) {
         __WFE();
+        
+        if (edhoc_state ==0) {
+            edhoc_state = 1;
+            printf("Beginning handshake...\n");
+            puts("preparing ead_1...\n");
+            ead_1.is_critical = false;
+            ead_1.label = 1;
+            uint8_t ret = 0;
+            ret += cborencoder_put_array(&ead_1.value.content[ret], 1);
+            ret += cborencoder_put_unsigned(&ead_1.value.content[ret], 258);
+            ead_1.value.len = ret;
+            printf("ead_1 length: %02x\n", ret);
+            
+            puts("preparing message_1...\n");
+            initiator_prepare_message_1(&initiator, NULL, &ead_1, &message_1);
+
+            db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
+            memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t), message_1.content, message_1.len);
+            size_t length = sizeof(protocol_header_t) + message_1.len;
+            db_radio_disable();
+            db_radio_tx(_dotbot_vars.radio_buffer, length);
+            for (uint8_t i = 0; i<length; i++){
+              printf("%02x",_dotbot_vars.radio_buffer[i]);
+              };
+            printf("\n");
+            puts("sent msg1.");
+            } else if (_dotbot_vars.update_edhoc && edhoc_state == 1) {
+            _dotbot_vars.update_edhoc = false;
+            
+            ////received message 2
+            memcpy(&message_2.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
+            message_2.len = _dotbot_vars.edhoc_buffer.len;
+            for (uint8_t i = 0; i<message_2.len; i++){
+              printf("%02x", message_2.content[i]);
+              };
+            printf("\n");
+            int8_t res = initiator_parse_message_2(
+                &initiator,
+                &message_2,
+                &c_r,
+                &id_cred_r,
+                &ead_2
+            );
+            printf("%02x\n", initiator);
+            printf("%02x\n", c_r);
+            printf("%02x\n", id_cred_r);
+
+            if (res != 0) {
+                printf("Error parse msg2: %d\n", res);
+                edhoc_state = -1;
+                continue;
+            }
+            res = credential_check_or_fetch(NULL, &id_cred_r, &fetched_cred_r);
+            if (res != 0) {
+                printf("Error handling credential: %d\n", res);
+                return 1;
+            }
+
+            //attestation ead_2
+            puts("processing ead_2");
+            for (uint8_t i = 0; i<ead_2.value.len; i++){
+              printf("%02x", ead_2.value.content[i]);
+            };
+            printf("\n");
+            if (ead_2.value.len == 0) {
+                printf("Error process ead2 (attestation request is empty): %d\n", res);
+                edhoc_state = -1;
+                continue;
+            }
+
+            res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
+            if (res != 0) {
+                printf("Error verify msg2: %d\n", res);
+                edhoc_state = -1;
+                continue;
+            }
+
+            puts("preparing ead_3");
+            attestation_status_t status = edhoc_initial_attest_signed_token(challenge, token_buf, &token_size);
+            if (status != 0){
+                printf("Attestation token generation: FAIL\n");
+                edhoc_state = -1;
+                continue;
+            }
+            else {
+                printf("Attestation token generation: SUCCESS\n");
+                }
+            
+            //complete ead_3
+            ead_3.is_critical = false;
+            ead_3.label = 1;
+            ead_3.value.len = token_size; //token_size;
+            //size of max ead_3 value needs to be extended
+            memcpy(&ead_3.value.content, &token_buf, ead_3.value.len);
+
+            puts("preparing msg3");
+            res = initiator_prepare_message_3(&initiator, ByReference, &ead_3, &message_3, &_dotbot_vars.prk_out);
+            if (res != 0) {
+                printf("Error prep msg3: %d\n", res);
+                edhoc_state = -1;
+                continue;
+            }
+
+            db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
+            uint8_t *ptr = _dotbot_vars.radio_buffer + sizeof(protocol_header_t);
+            *ptr = c_r;
+            memcpy(++ptr, message_3.content, message_3.len);
+            size_t length = sizeof(protocol_header_t) + 1 + message_3.len;
+            db_radio_disable();
+            db_radio_tx(_dotbot_vars.radio_buffer, length);
+            _dotbot_vars.gateway_authenticated = true;
+
+            printf("\nDotBot <-> Gateway authenticated.\n");
+            printf("Derived key:   ");
+            for (size_t i = 0; i < SHA256_DIGEST_LEN; i++) {
+                printf("%X ", _dotbot_vars.prk_out[i]);
+            }
+            printf("\n");
+        }
+
+        if (!_dotbot_vars.gateway_authenticated) {
+          continue;
+        }
 
         bool need_advertize = false;
         // Process available lighthouse data

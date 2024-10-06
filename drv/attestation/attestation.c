@@ -9,6 +9,7 @@
 #include "sha256.h"
 #include "ed25519.h"
 
+
 //================================ defines =================================
 
 #define ED25519_SIGNATURE_LEN   (64U)
@@ -229,6 +230,7 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
     *token_size += cborencoder_put_array(&buffer[*token_size], 2); //fixed, two attributes in hashed value array
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate sha256
     *token_size += cborencoder_put_bytes(&buffer[*token_size], evidence->file.hash_image, HASH_LEN);
+
     if (*token_size != 0){
         return ATTESTATION_SUCCESS;
     }
@@ -345,10 +347,13 @@ static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions
  * @brief fill measurements Claim: using swid+cbor
  */
 static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evidence, uint8_t *token_buf, uint8_t *token_size, uint8_t hash[HASH_LEN], uint32_t *image_size){
-    strcpy(evidence->file.fs_name, "01drv_attestation-nrf52840dk.bin");
+
+    //strcpy(evidence->file.fs_name, "01drv_attestation-nrf52840dk.bin");
+    strcpy(evidence->file.fs_name, "03app_dotbot-nrf5340dk-app.bin");
     evidence->file.hash_alg = 1;  //fixed, sha256
     memcpy(evidence->file.hash_image, hash, HASH_LEN);
     evidence->file.size = *image_size;  //!!!!!!!!!!!!!!TBC how to get the size of file in DotBot!!!!!!!!!!!!!!!
+    //evidence->file.size = NULL;
     if (evidence == NULL){
         return ATTESTATION_ERROR_EVIDENCE;
     }
@@ -362,10 +367,13 @@ static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evid
  */
 static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements_claim_t *claim, uint8_t *token_buf, uint8_t *token_size){
     claim->content_format_id = IANA_COAP_CONTENT_FORMATS_SWID;
-    strcpy(claim->coswid.tag_id, "aaa");
-    claim->coswid.tag_version = 0;
-    strcpy(claim->coswid.software_name, "DotBot firmware image 1");
-    strcpy(claim->coswid.entity.entity_name, "Attester");
+    //strcpy(claim->coswid.tag_id, "aaa");
+    strcpy(claim->coswid.tag_id, "");
+    //claim->coswid.tag_version = 0;
+    //strcpy(claim->coswid.software_name, "DotBot firmware image 1");
+    strcpy(claim->coswid.software_name, "DotBot");
+    //strcpy(claim->coswid.entity.entity_name, "Attester");
+    strcpy(claim->coswid.entity.entity_name, "");
     claim->coswid.entity.role = 1;
          
     if (claim == NULL){
@@ -381,7 +389,7 @@ static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements
  * @brief collect other infos then create the payload in CBOR
  */
 static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t challenge[8], size_t challenge_size, token_t *token, uint8_t *token_buf, uint8_t *token_size){
-    memcpy(token->ueid, "bbb", strlen("bbb"));
+    memcpy(token->ueid, "u", strlen("u"));
     memcpy(token->nonce, challenge, challenge_size);
 
     if (token == NULL){
@@ -458,7 +466,8 @@ uint32_t image_size = 0;
 status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
 status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
 status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
-status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash, &image_size);
+status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash, &image_size); 
+
 
 //payload as a bstr to be encoded
 *token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
