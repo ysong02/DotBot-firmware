@@ -10,9 +10,10 @@
 #define EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8 (8u)
 //#define EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_32 (32u)
 //#define EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_48 (48u)
+#define PROVIDED_EVIDENCE_TYPE (258u)
 #define HASH_LEN (32u)
 #define MAX_UEID (33u)
-#define MAX_TOKEN               (500U)
+#define MAX_TOKEN              (500U)
 
 ///< attestation status enumeration
 typedef enum {
@@ -29,6 +30,17 @@ typedef enum {
     } attestation_status_t;
            
 //================================ functions =================================
+
+uint8_t cborencoder_put_array(uint8_t *buffer, uint8_t elements);
+uint8_t cborencoder_put_unsigned(uint8_t *buffer, unsigned long value);
+/**
+ * @brief encode the array an bytes in CBOR, and return a int indicating the length of cbor output
+ */
+
+uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decoded_bytes, uint8_t *decoded_length);
+/**
+ * @brief decode the ead_2 and get the value of selected evidence type and nonce
+ */
 
 attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8], uint8_t *token_buf, uint8_t *token_size);
 /**

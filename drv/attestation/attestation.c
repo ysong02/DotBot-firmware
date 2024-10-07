@@ -10,6 +10,7 @@
 #include "ed25519.h"
 
 
+
 //================================ defines =================================
 
 #define ED25519_SIGNATURE_LEN   (64U)
@@ -112,6 +113,10 @@ const uint8_t private_key[32] = {
 
 //================================ private =================================
 
+/**
+ * @brief CBOR encoding funcitons
+ */
+
 uint8_t cborencoder_put_map(uint8_t *buffer, uint8_t elements) {
     uint8_t ret = 0;
 
@@ -212,6 +217,78 @@ uint8_t cborencoder_put_text(uint8_t *buffer, const char *text, uint8_t text_len
     }
 
     return ret;
+}
+
+/**
+ * @brief CBOR decoding functions 
+ */
+ uint8_t cbor_decode_unsigned(uint8_t *buffer, uint32_t *value) {
+    uint8_t ret = 0;
+    uint8_t lead_byte = buffer[0];
+
+    if (lead_byte <= 0x17) {
+        *value = lead_byte;
+        ret = 1;  
+    } else if (lead_byte == 0x18) {
+        *value = buffer[1];
+        ret = 2;  
+    } else if (lead_byte == 0x19) {
+        *value = (buffer[1] << 8) | buffer[2];
+        ret = 3;  
+    } else if (lead_byte == 0x1a) {
+        *value = (buffer[1] << 24) | (buffer[2] << 16) | (buffer[3] << 8) | buffer[4];
+        ret = 5;  
+    } else {
+        ret = 0;  
+    }
+
+    return ret;
+}
+
+uint8_t cbor_decode_bytestring(uint8_t *buffer, uint8_t *output, uint8_t *length) {
+    uint8_t ret = 0;
+    uint8_t lead_byte = buffer[0];
+
+    if (lead_byte >= 0x40 && lead_byte <= 0x57) {
+        *length = lead_byte - 0x40;
+        memcpy(output, &buffer[1], *length);
+        ret = 1 + *length;
+    } else if (lead_byte == 0x58) {
+        *length = buffer[1];
+        memcpy(output, &buffer[2], *length);
+        ret = 2 + *length;
+    } else {
+        ret = 0;  
+    }
+
+    return ret;
+}
+
+/**
+ * @brief decode the ead_2 (attestation request) and get the value of evidence type and nonce
+ */
+uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decoded_bytes, uint8_t *decoded_length) {
+    uint8_t index = 0;
+    uint8_t first_byte = buffer[index++];
+    if (first_byte != 0x82 ){
+        return -1;
+        }
+    printf("first index is: \n");
+    printf("%02x\n", index);
+
+    index += cbor_decode_unsigned(buffer+index, decoded_integer);
+    printf("%02x\n", index);
+    if (index == 0) {
+        return -1;  
+    }
+  
+    index += cbor_decode_bytestring(buffer+index, decoded_bytes, decoded_length);
+    printf("%02x\n", index); 
+    if (index == 0) {
+        return -2; 
+    }
+
+    return 0;
 }
 
 /**
@@ -389,7 +466,7 @@ static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements
  * @brief collect other infos then create the payload in CBOR
  */
 static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t challenge[8], size_t challenge_size, token_t *token, uint8_t *token_buf, uint8_t *token_size){
-    memcpy(token->ueid, "u", strlen("u"));
+    memcpy(token->ueid, "aaa", strlen("aaa"));
     memcpy(token->nonce, challenge, challenge_size);
 
     if (token == NULL){

@@ -120,14 +120,18 @@ static uint8_t c_r = 0;
 static EdhocMessageBuffer message_2 = {0};
 static EdhocMessageBuffer message_3 = {0};
 
-// used druing execution of attestation
-//test ead3 later
+//used druing execution of attestation
 static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
+//used for execution of eads
 
-//usde during execution of ead_3
-const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8] = {0xa2, 0x9f, 0x62, 0xa4, 0xc6, 0xcd, 0xaa, 0xe5}; //should receive from the verifier
+//used during execution of ead_3
+//const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8] = {0xa2, 0x9f, 0x62, 0xa4, 0xc6, 0xcd, 0xaa, 0xe5}; //should receive from the verifier
+uint8_t decoded_nonce[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
+uint32_t decoded_evidence_type;
+uint8_t decoded_nonce_length = 0;
 uint8_t token_buf[MAX_TOKEN];
 uint8_t token_size;
+
 
 //=========================== prototypes =======================================
 
@@ -214,44 +218,8 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
             break;
     }
 }
-//===========================private function for attestation ================
-uint8_t cborencoder_put_array(uint8_t *buffer, uint8_t elements) {
-    uint8_t ret = 0;
-
-    if (elements > 15) {
-        return 0;
-    }
-
-    buffer[ret++] = (0x80 | elements);
-    return ret;
-}
-
-uint8_t cborencoder_put_unsigned(uint8_t *buffer, unsigned long value) {
-    uint8_t ret = 0;
-
-    if (value <= 0x17){
-        buffer[ret++] = value;
-    } else if (value <= 0xff){
-        buffer[ret++] = 0x18;
-        buffer[ret++] = value;
-    } else if (value <= 0xffff)
-    {
-        buffer[ret++] = 0x19;
-        buffer[ret++] = (value >> 8)& 0xff;
-        buffer[ret++] = value & 0xff;
-    } else if (value <= 0xffffffff){
-        buffer[ret++] = 0x1a;
-        buffer[ret++] = (value >> 24)& 0xff;
-        buffer[ret++] = (value >> 16)& 0xff;
-        buffer[ret++] = (value >> 8) & 0xff;
-        buffer[ret++] = value & 0xff;
-    }
-
-    return ret;
-}
 
 //=========================== main =============================================
-
 
 int main(void) {
     db_board_init();
@@ -306,11 +274,12 @@ int main(void) {
             edhoc_state = 1;
             printf("Beginning handshake...\n");
             puts("preparing ead_1...\n");
+            //function
             ead_1.is_critical = false;
             ead_1.label = 1;
             uint8_t ret = 0;
             ret += cborencoder_put_array(&ead_1.value.content[ret], 1);
-            ret += cborencoder_put_unsigned(&ead_1.value.content[ret], 258);
+            ret += cborencoder_put_unsigned(&ead_1.value.content[ret], PROVIDED_EVIDENCE_TYPE);
             ead_1.value.len = ret;
             printf("ead_1 length: %02x\n", ret);
             
@@ -330,7 +299,7 @@ int main(void) {
             } else if (_dotbot_vars.update_edhoc && edhoc_state == 1) {
             _dotbot_vars.update_edhoc = false;
             
-            ////received message 2
+            //received message 2
             memcpy(&message_2.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
             message_2.len = _dotbot_vars.edhoc_buffer.len;
             for (uint8_t i = 0; i<message_2.len; i++){
@@ -344,9 +313,6 @@ int main(void) {
                 &id_cred_r,
                 &ead_2
             );
-            printf("%02x\n", initiator);
-            printf("%02x\n", c_r);
-            printf("%02x\n", id_cred_r);
 
             if (res != 0) {
                 printf("Error parse msg2: %d\n", res);
@@ -364,12 +330,13 @@ int main(void) {
             for (uint8_t i = 0; i<ead_2.value.len; i++){
               printf("%02x", ead_2.value.content[i]);
             };
-            printf("\n");
+            printf("\n");           
+
             if (ead_2.value.len == 0) {
                 printf("Error process ead2 (attestation request is empty): %d\n", res);
                 edhoc_state = -1;
                 continue;
-            }
+            } 
 
             res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
             if (res != 0) {
@@ -378,22 +345,31 @@ int main(void) {
                 continue;
             }
 
-            puts("preparing ead_3");
-            attestation_status_t status = edhoc_initial_attest_signed_token(challenge, token_buf, &token_size);
-            if (status != 0){
-                printf("Attestation token generation: FAIL\n");
-                edhoc_state = -1;
-                continue;
-            }
-            else {
-                printf("Attestation token generation: SUCCESS\n");
+            //decode ead_2, get the selected evidence type and nonce
+            if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
+                //check the selected evidence type is the provided one
+                if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
+                    puts("preparing ead_3");
+                    //generate the attestation token
+                    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, token_buf, &token_size);
+                    if (status != 0){
+                        printf("Attestation token generation: FAIL\n");
+                        edhoc_state = -1;
+                        continue;
+                    }else {
+                        printf("Attestation token generation: SUCCESS\n");
+                    }
                 }
+            }else {
+                printf("decode ead_2 fail");
+                }
+
             
             //complete ead_3
             ead_3.is_critical = false;
             ead_3.label = 1;
-            ead_3.value.len = token_size; //token_size;
-            //size of max ead_3 value needs to be extended
+            ead_3.value.len = token_size;
+            //size of max ead_3 value needs to be adjusted
             memcpy(&ead_3.value.content, &token_buf, ead_3.value.len);
 
             puts("preparing msg3");
