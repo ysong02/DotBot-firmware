@@ -57,6 +57,7 @@ static void radio_callback(uint8_t *packet, uint8_t length) {
 /**
  *  @brief The program starts executing here.
  */
+
 int main(void) {
 
     // Turn ON the DotBot board regulator

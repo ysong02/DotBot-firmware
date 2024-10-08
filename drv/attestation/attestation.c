@@ -273,21 +273,14 @@ uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decode
     if (first_byte != 0x82 ){
         return -1;
         }
-    printf("first index is: \n");
-    printf("%02x\n", index);
-
     index += cbor_decode_unsigned(buffer+index, decoded_integer);
-    printf("%02x\n", index);
     if (index == 0) {
         return -1;  
     }
-  
     index += cbor_decode_bytestring(buffer+index, decoded_bytes, decoded_length);
-    printf("%02x\n", index); 
     if (index == 0) {
         return -2; 
     }
-
     return 0;
 }
 
@@ -499,11 +492,6 @@ static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, c
 
     //add payload to sig_structure
     memcpy(&sig_structure_cbor[sig_structure], data, data_size);
-    printf("sig_structure is: \n");
-    for (uint8_t i =0; i < sig_structure+data_size; i++){
-    printf("%02x", sig_structure_cbor[i]);
-    }
-    printf("\n");
 
     //generate signature
     size_t signature_len = crypto_ed25519_sign (signature, sig_structure_cbor, sig_structure+data_size, private_key, public_key);
@@ -563,4 +551,3 @@ for (uint8_t i = 0; i<*token_size; i++){
 printf("\n");
 return ATTESTATION_SUCCESS;
 }
-
