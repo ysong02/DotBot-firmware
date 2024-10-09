@@ -8,8 +8,7 @@
 #include "attestation.h"
 #include "sha256.h"
 #include "ed25519.h"
-
-
+#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
 
 //================================ defines =================================
 
@@ -404,12 +403,6 @@ static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions
     if (hash == NULL){
         return ATTESTATION_ERROR_EVIDENCE;
     }
-     
-    printf("Attestation Hash result:\n");
-    for (uint8_t i = 0; i < HASH_LEN; i++){
-        printf("%02x", hash[i]);
-    }
-    printf("\n");
     return 0;
 }
 
@@ -500,11 +493,6 @@ static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, c
     } else {
         *token_size += cborencoder_put_bytes(&token_buf[*token_size], signature, ED25519_SIGNATURE_LEN);
     }
-    printf("signature is:\n");
-    for (uint8_t i = 0; i<ED25519_SIGNATURE_LEN; i++){
-          printf("%02x", signature[i]);
-        }
-    printf("\n");
     return 0;
 }
 
@@ -542,12 +530,24 @@ status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *t
 if (status!=0){
     return ATTESTATION_ERROR_SIGNATURE;
 }
-
-printf("Final token size: %d\n", *token_size);
-printf("The entire token is:\n");
-for (uint8_t i = 0; i<*token_size; i++){
-        printf("%02x", token_buf[i]);
-}
-printf("\n");
 return ATTESTATION_SUCCESS;
+}
+
+void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
+    uint8_t ret = 0;
+    ead->is_critical = is_critical;
+    ead->label = label;
+    ret += cborencoder_put_array(&ead->value.content[ret], 1);
+    ret += cborencoder_put_unsigned(&ead->value.content[ret], PROVIDED_EVIDENCE_TYPE);
+    ead->value.len = ret;
+} 
+
+void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
+    ead_3->is_critical = is_critical;
+    ead_3->label = label;
+    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_3->value.content, token_size);
+    ead_3->value.len = *token_size;
+    if (status != 0){
+        printf("Attestation token generation: FAIL\n");
+        }
 }

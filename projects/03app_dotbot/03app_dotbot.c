@@ -217,30 +217,6 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
     }
 }
 
-//=========================== private functions ================================
-
-//assign values to ead item
-void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
-    uint8_t ret = 0;
-    ead->is_critical = is_critical;
-    ead->label = label;
-    ret += cborencoder_put_array(&ead_1.value.content[ret], 1);
-    ret += cborencoder_put_unsigned(&ead_1.value.content[ret], PROVIDED_EVIDENCE_TYPE);
-    ead->value.len = ret;
-} 
-
-void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce){
-    ead_3->is_critical = is_critical;
-    ead_3->label = label;
-    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_3->value.content, &token_size);
-    ead_3->value.len = token_size;
-    if (status != 0){
-        printf("Attestation token generation: FAIL\n");
-    }else {
-        printf("Attestation token generation: SUCCESS\n");
-        }
-}
-
 //=========================== main =============================================
 
 int main(void) {
@@ -295,8 +271,6 @@ int main(void) {
         if (edhoc_state ==0) {
             edhoc_state = 1;
             printf("Beginning handshake...\n");
-            puts("preparing ead_1...\n");
-
             prepare_ead_1(&ead_1, 1, true);
             
             puts("preparing message_1...\n");
@@ -335,9 +309,6 @@ int main(void) {
 
             //attestation ead_2
             puts("processing ead_2");
-            for (uint8_t i = 0; i<ead_2.value.len; i++){
-              printf("%02x", ead_2.value.content[i]);
-            };
             printf("\n");           
 
             if (ead_2.value.len == 0) {
@@ -359,7 +330,7 @@ int main(void) {
                 if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
                     puts("preparing ead_3");
                     //size of max ead_3 value needs to be adjusted
-                    prepare_ead_3(&ead_3, 1, true, decoded_nonce);                  
+                    prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
                 }
             }else {
                 printf("decode ead_2 fail");

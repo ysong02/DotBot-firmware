@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "partition.h"
+#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
 
 //=======================defines============================
 
@@ -46,5 +48,7 @@ attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[E
 /**
  * @brief generate a COSE_Sign1 token 
  */
+void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical);
+void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
 
 #endif //__ATTESTATION_H
