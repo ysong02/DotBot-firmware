@@ -121,15 +121,15 @@ static EdhocMessageBuffer message_2 = {0};
 static EdhocMessageBuffer message_3 = {0};
 
 //used druing execution of attestation
-static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
+//static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
 //used for execution of eads
 
 //used during execution of ead_3
-uint8_t decoded_nonce[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
-uint32_t decoded_evidence_type;
-uint8_t decoded_nonce_length = 0;
-uint8_t token_size;
-
+//uint8_t decoded_nonce[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
+//uint32_t decoded_evidence_type;
+//uint8_t decoded_nonce_length = 0;
+//uint8_t token_size;
+static EADItemC dummy_ead = {0};
 
 //=========================== prototypes =======================================
 
@@ -271,10 +271,11 @@ int main(void) {
         if (edhoc_state ==0) {
             edhoc_state = 1;
             printf("Beginning handshake...\n");
-            prepare_ead_1(&ead_1, 1, true);
+            //prepare_ead_1(&ead_1, 1, true);
             
             puts("preparing message_1...\n");
-            initiator_prepare_message_1(&initiator, NULL, &ead_1, &message_1);
+            //initiator_prepare_message_1(&initiator, NULL, &ead_1, &message_1);
+            initiator_prepare_message_1(&initiator, NULL, NULL, &message_1);
 
             db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
             memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t), message_1.content, message_1.len);
@@ -293,7 +294,7 @@ int main(void) {
                 &message_2,
                 &c_r,
                 &id_cred_r,
-                &ead_2
+                &dummy_ead
             );
 
             if (res != 0) {
@@ -308,14 +309,14 @@ int main(void) {
             }
 
             //attestation ead_2
-            puts("processing ead_2");
-            printf("\n");           
+            //puts("processing ead_2");
+            //printf("\n");           
 
-            if (ead_2.value.len == 0) {
-                printf("Error process ead2 (attestation request is empty): %d\n", res);
-                edhoc_state = -1;
-                continue;
-            } 
+            //if (ead_2.value.len == 0) {
+            //    printf("Error process ead2 (attestation request is empty): %d\n", res);
+            //    edhoc_state = -1;
+            //    continue;
+            //} 
 
             res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
             if (res != 0) {
@@ -325,19 +326,19 @@ int main(void) {
             }
 
             //decode ead_2, get the selected evidence type and nonce
-            if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
-                //check the selected evidence type is the provided one
-                if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
-                    puts("preparing ead_3");
-                    //size of max ead_3 value needs to be adjusted
-                    prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
-                }
-            }else {
-                printf("decode ead_2 fail");
-                }
+            //if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
+            //    //check the selected evidence type is the provided one
+            //    if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
+            //        puts("preparing ead_3");
+            //        //size of max ead_3 value needs to be adjusted
+            //        prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
+            //    }
+            //}else {
+            //    printf("decode ead_2 fail");
+            //    }
 
             puts("preparing msg3");
-            res = initiator_prepare_message_3(&initiator, ByReference, &ead_3, &message_3, &_dotbot_vars.prk_out);
+            res = initiator_prepare_message_3(&initiator, ByReference, NULL, &message_3, &_dotbot_vars.prk_out);
             if (res != 0) {
                 printf("Error prep msg3: %d\n", res);
                 edhoc_state = -1;
