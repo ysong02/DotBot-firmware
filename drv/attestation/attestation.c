@@ -452,7 +452,7 @@ static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements
  * @brief collect other infos then create the payload in CBOR
  */
 static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t challenge[8], size_t challenge_size, token_t *token, uint8_t *token_buf, uint8_t *token_size){
-    memcpy(token->ueid, "aaa", strlen("aaa"));
+    memcpy(token->ueid, "aaabbcc", strlen("aaabbcc"));
     memcpy(token->nonce, challenge, challenge_size);
 
     if (token == NULL){
