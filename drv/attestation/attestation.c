@@ -10,6 +10,9 @@
 #include "ed25519.h"
 #include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
 
+//measurements
+#include "board_config.h"
+
 //================================ defines =================================
 
 #define ED25519_SIGNATURE_LEN   (64U)
@@ -21,7 +24,6 @@
 #define MAX_TAG_ID              (32U)
 
 #define IANA_CBOR_COSWID_FILE_FS_NAME_KEY 24
-#define IANA_CBOR_COSWID_FILE_SIZE_KEY 20
 #define IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY 7
 #define IANA_CBOR_COSWID_FILE_KEY 17
 
@@ -46,7 +48,6 @@
 typedef struct 
 {
     char fs_name[MAX_FS_NAME]; //(index 24)
-    uint32_t size; //(index 20)
     uint8_t hash_alg;  
     uint8_t hash_image[HASH_LEN];  //(index 7)
 }file_t;
@@ -109,6 +110,9 @@ const uint8_t public_key[32] = {
 const uint8_t private_key[32] = {
     0xf3, 0x8f, 0x0d, 0xd6, 0x13, 0x62, 0x06, 0x3c, 0xd7, 0xa1, 0xdf, 0x84, 0x6b, 0x8a, 0x56, 0x2e, 0x9c, 0x60, 0x55, 0x80, 0xe9, 0x95, 0xed, 0xe9, 0x5f, 0x64, 0x47, 0xc5, 0x04, 0x44, 0x96, 0x87
 };
+
+//static const gpio_t p023 = { .port = 0, .pin = 23 }; //measure hash
+static const gpio_t p024 = { .port = 0, .pin = 24 }; //measure signature
 
 //================================ private =================================
 
@@ -290,11 +294,9 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
     *token_size += cborencoder_put_map(&buffer[*token_size], 1); //changeable, one evidence element
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_KEY); 
     *token_size += cborencoder_put_array(&buffer[*token_size], 1); // changeable, one file in the array
-    *token_size += cborencoder_put_map(&buffer[*token_size], 3); //fixed, three index for the file map
+    *token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 index for the file map
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_FS_NAME_KEY); 
     *token_size += cborencoder_put_text(&buffer[*token_size], evidence->file.fs_name, strlen(evidence->file.fs_name));
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_SIZE_KEY);
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], evidence->file.size); // need to extend the put_unsigned function 
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY);
     *token_size += cborencoder_put_array(&buffer[*token_size], 2); //fixed, two attributes in hashed value array
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate sha256
@@ -400,6 +402,7 @@ static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions
 
      //finalize sha256
     crypto_sha256(hash);  
+
     if (hash == NULL){
         return ATTESTATION_ERROR_EVIDENCE;
     }
@@ -409,14 +412,12 @@ static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions
 /**
  * @brief fill measurements Claim: using swid+cbor
  */
-static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evidence, uint8_t *token_buf, uint8_t *token_size, uint8_t hash[HASH_LEN], uint32_t *image_size){
+static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evidence, uint8_t *token_buf, uint8_t *token_size, uint8_t hash[HASH_LEN]){
 
     //strcpy(evidence->file.fs_name, "01drv_attestation-nrf52840dk.bin");
     strcpy(evidence->file.fs_name, "03app_dotbot-nrf5340dk-app.bin");
     evidence->file.hash_alg = 1;  //fixed, sha256
     memcpy(evidence->file.hash_image, hash, HASH_LEN);
-    evidence->file.size = *image_size;  //!!!!!!!!!!!!!!TBC how to get the size of file in DotBot!!!!!!!!!!!!!!!
-    //evidence->file.size = NULL;
     if (evidence == NULL){
         return ATTESTATION_ERROR_EVIDENCE;
     }
@@ -499,55 +500,67 @@ static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, c
 //================================ public =================================
 
 attestation_status_t edhoc_initial_attest_signed_token(const uint8_t *challenge, uint8_t *token_buf, uint8_t *token_size){
+    
+    db_gpio_init(&p024, DB_GPIO_OUT);
+    db_gpio_set(&p024);
 
-//the whole signed token size
-*token_size = 0;
-uint8_t protected_header_start = 0;
-uint8_t protected_header_end = 0;
-//headers
-status = edhoc_initial_attest_encode_cose_headers(token_buf, token_size, &protected_header_start, &protected_header_end);
-if (status!=0){
-    printf("error: %d\n", status);
-    return status;
-}
-uint8_t payload_start = *token_size;
-uint8_t payload_size = 0;
-uint8_t pre_token_buf[MAX_TOKEN];
-uint32_t image_size = 0;
+    //the whole signed token size
+    *token_size = 0;
+    uint8_t protected_header_start = 0;
+    uint8_t protected_header_end = 0;
+    //headers
+    status = edhoc_initial_attest_encode_cose_headers(token_buf, token_size, &protected_header_start, &protected_header_end);
+    if (status!=0){
+        //printf("error: %d\n", status);
+        return status;
+    }
+    uint8_t payload_start = *token_size;
+    uint8_t payload_size = 0;
+    uint8_t pre_token_buf[MAX_TOKEN];
+    uint32_t image_size = 0;
 
-//payload encoded in CBOR to be a bstr
-status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
-status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
-status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
-status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash, &image_size); 
+    //payload encoded in CBOR to be a bstr
+    status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
+    status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
+    
+    db_gpio_clear(&p024);
+    db_gpio_set(&p024);
+    
+    status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
+    status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash); 
 
+    //payload as a bstr to be encoded
+    *token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
 
-//payload as a bstr to be encoded
-*token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
+    //measurement ends: generate evidence + cbor
+    db_gpio_clear(&p024);
+    db_gpio_set(&p024);
 
-//signature
-status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *token_size-payload_start, private_key, public_key, token_buf, token_size, &protected_header_start, &protected_header_end);
-if (status!=0){
-    return ATTESTATION_ERROR_SIGNATURE;
-}
-return ATTESTATION_SUCCESS;
-}
+    //signature
+    status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *token_size-payload_start, private_key, public_key, token_buf, token_size, &protected_header_start, &protected_header_end);
+    db_gpio_clear(&p024);
+    if (status!=0){
+        return ATTESTATION_ERROR_SIGNATURE;
+    }
+    return ATTESTATION_SUCCESS;
+    }
 
-void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
-    uint8_t ret = 0;
-    ead->is_critical = is_critical;
-    ead->label = label;
-    ret += cborencoder_put_array(&ead->value.content[ret], 1);
-    ret += cborencoder_put_unsigned(&ead->value.content[ret], PROVIDED_EVIDENCE_TYPE);
-    ead->value.len = ret;
-} 
+    void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
+        uint8_t ret = 0;
+        ead->is_critical = is_critical;
+        ead->label = label;
+        ret += cborencoder_put_array(&ead->value.content[ret], 1);
+        ret += cborencoder_put_unsigned(&ead->value.content[ret], PROVIDED_EVIDENCE_TYPE);
+        ead->value.len = ret;
+    } 
 
-void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
-    ead_3->is_critical = is_critical;
-    ead_3->label = label;
-    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_3->value.content, token_size);
-    ead_3->value.len = *token_size;
-    if (status != 0){
-        printf("Attestation token generation: FAIL\n");
-        }
-}
+    void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
+
+        ead_3->is_critical = is_critical;
+        ead_3->label = label;
+        attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_3->value.content, token_size);
+        ead_3->value.len = *token_size;
+        if (status != 0){
+            //printf("Attestation token generation: FAIL\n");
+            }
+    }

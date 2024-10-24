@@ -120,9 +120,8 @@ static uint8_t c_r = 0;
 static EdhocMessageBuffer message_2 = {0};
 static EdhocMessageBuffer message_3 = {0};
 
-//used druing execution of attestation
+//used during execution of attestation
 static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
-//used for execution of eads
 
 //used during execution of ead_3
 uint8_t decoded_nonce[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
@@ -130,6 +129,13 @@ uint32_t decoded_evidence_type;
 uint8_t decoded_nonce_length = 0;
 uint8_t token_size;
 
+// measurements
+static const gpio_t p020 = { .port = 0, .pin = 20 };  //sync otii
+//static const gpio_t p025 = { .port = 0, .pin = 25 }; // prepare message1
+//static const gpio_t p006 = { .port = 0, .pin = 06 };  //tx +rx message 2 +  parse message 2 + process ead_2
+//static const gpio_t p007 = { .port = 0, .pin = 07 };   // verify message_2
+static const gpio_t p023 = { .port = 0, .pin = 23 };   // evidence
+//static const gpio_t p024 = { .port = 0, .pin = 24 };   // signature
 
 //=========================== prototypes =======================================
 
@@ -221,6 +227,13 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
 
 int main(void) {
     db_board_init();
+
+    //measurements init
+    //db_gpio_init(&p025, DB_GPIO_OUT);
+    //db_gpio_init(&p006, DB_GPIO_OUT);
+    //db_gpio_init(&p007, DB_GPIO_OUT);
+    db_gpio_init(&p023, DB_GPIO_OUT);
+    db_gpio_init(&p020, DB_GPIO_OUT); //sync otii
 #ifdef ENABLE_DOTBOT_LOG_DATA
     db_log_flash_init(LOG_DATA_DOTBOT);
 #endif
@@ -251,40 +264,58 @@ int main(void) {
     db_lh2_init(&_dotbot_vars.lh2, &db_lh2_d, &db_lh2_e);
     db_lh2_start();
 
-    //yuxuan: i don't know what it is for; but will have error without it
     uint8_t buffer[4096 * 2] = {0};
     mbedtls_memory_buffer_alloc_init(buffer, 4096 * 2);
 
-    puts("Initializing EDHOC and EAD attestation");
+    //puts("Initializing EDHOC and EAD attestation");
     credential_new(&cred_i, CRED_I[EDHOC_INITIATOR_INDEX], sizeof(CRED_I[EDHOC_INITIATOR_INDEX]) / sizeof(CRED_I[EDHOC_INITIATOR_INDEX][0]));
-    initiator_new(&initiator);
+
 
     _dotbot_vars.gateway_authenticated = false;
     int edhoc_state = 0;
 
-    printf("Dotbot initialized.\n");
-    printf("Gateway NOT authenticated.\n");
+    //printf("Dotbot initialized.\n");
+    //printf("Gateway NOT authenticated.\n");
+    db_timer_delay_ms(TIMER_DEV, 1000);
 
     while (1) {
         __WFE();
         
         if (edhoc_state ==0) {
+            db_gpio_set(&p020); //measurement starts
+
             edhoc_state = 1;
-            printf("Beginning handshake...\n");
+            //printf("Beginning handshake...\n");
+            
+            db_gpio_set(&p023); 
+                     
+            //puts("preparing message_1...\n");
+            initiator_new(&initiator);
+            
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
+
             prepare_ead_1(&ead_1, 1, true);
             
-            puts("preparing message_1...\n");
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
+            
             initiator_prepare_message_1(&initiator, NULL, &ead_1, &message_1);
+
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
 
             db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
             memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t), message_1.content, message_1.len);
             size_t length = sizeof(protocol_header_t) + message_1.len;
             db_radio_disable();
             db_radio_tx(_dotbot_vars.radio_buffer, length);
-            puts("sent msg1.");
+            //puts("sent msg1.");
             } else if (_dotbot_vars.update_edhoc && edhoc_state == 1) {
             _dotbot_vars.update_edhoc = false;
             
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
             //received message 2
             memcpy(&message_2.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
             message_2.len = _dotbot_vars.edhoc_buffer.len;
@@ -297,49 +328,61 @@ int main(void) {
             );
 
             if (res != 0) {
-                printf("Error parse msg2: %d\n", res);
+               // printf("Error parse msg2: %d\n", res);
                 edhoc_state = -1;
                 continue;
             }
             res = credential_check_or_fetch(NULL, &id_cred_r, &fetched_cred_r);
             if (res != 0) {
-                printf("Error handling credential: %d\n", res);
+                //printf("Error handling credential: %d\n", res);
                 return 1;
             }
 
             //attestation ead_2
-            puts("processing ead_2");
-            printf("\n");           
-
-            if (ead_2.value.len == 0) {
-                printf("Error process ead2 (attestation request is empty): %d\n", res);
-                edhoc_state = -1;
-                continue;
-            } 
+            //puts("processing ead_2");
+            //printf("\n");           
+            
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
 
             res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
             if (res != 0) {
-                printf("Error verify msg2: %d\n", res);
+                //printf("Error verify msg2: %d\n", res);
                 edhoc_state = -1;
                 continue;
             }
-
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
+            
             //decode ead_2, get the selected evidence type and nonce
+            if (ead_2.value.len == 0) {
+                //printf("Error process ead2 (attestation request is empty): %d\n", res);
+                edhoc_state = -1;
+                continue;
+            } 
             if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
                 //check the selected evidence type is the provided one
                 if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
-                    puts("preparing ead_3");
+                  //  puts("preparing ead_3");
                     //size of max ead_3 value needs to be adjusted
+
+                    db_gpio_clear(&p023);
+                    db_gpio_set(&p023);
+
                     prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
                 }
             }else {
-                printf("decode ead_2 fail");
+                //printf("decode ead_2 fail");
                 }
 
-            puts("preparing msg3");
+            //puts("preparing msg3");
+
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
+
             res = initiator_prepare_message_3(&initiator, ByReference, &ead_3, &message_3, &_dotbot_vars.prk_out);
             if (res != 0) {
-                printf("Error prep msg3: %d\n", res);
+               // printf("Error prep msg3: %d\n", res);
                 edhoc_state = -1;
                 continue;
             }
@@ -347,13 +390,22 @@ int main(void) {
             db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
             uint8_t *ptr = _dotbot_vars.radio_buffer + sizeof(protocol_header_t);
             *ptr = c_r;
+            
+            db_gpio_clear(&p023);
+            db_gpio_set(&p023);
+            
             memcpy(++ptr, message_3.content, message_3.len);
             size_t length = sizeof(protocol_header_t) + 1 + message_3.len;
             db_radio_disable();
             db_radio_tx(_dotbot_vars.radio_buffer, length);
             _dotbot_vars.gateway_authenticated = true;
+            
+            //measurements end
+            db_gpio_clear(&p023);
+            db_gpio_clear(&p020);
 
             printf("\nDotBot <-> Gateway authenticated.\n");
+
             printf("Derived key:   ");
             for (size_t i = 0; i < SHA256_DIGEST_LEN; i++) {
                 printf("%X ", _dotbot_vars.prk_out[i]);
