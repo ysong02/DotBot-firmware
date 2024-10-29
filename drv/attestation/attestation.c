@@ -49,7 +49,6 @@
 typedef struct 
 {
     char fs_name[MAX_FS_NAME]; //(index 24)
-    //uint32_t size; //(index 20)
     uint8_t hash_alg;  
     uint8_t hash_image[HASH_LEN];  //(index 7)
 }file_t;
@@ -297,8 +296,6 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
     *token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 index for the file map
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_FS_NAME_KEY); 
     *token_size += cborencoder_put_text(&buffer[*token_size], evidence->file.fs_name, strlen(evidence->file.fs_name));
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_SIZE_KEY);
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], evidence->file.size); // need to extend the put_unsigned function 
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY);
     *token_size += cborencoder_put_array(&buffer[*token_size], 2); //fixed, two attributes in hashed value array
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate sha256
@@ -419,8 +416,6 @@ static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evid
     strcpy(evidence->file.fs_name, "03app_dotbot-nrf5340dk-app.bin");
     evidence->file.hash_alg = 1;  //fixed, sha256
     memcpy(evidence->file.hash_image, hash, HASH_LEN);
-    //evidence->file.size = *image_size;  //!!!!!!!!!!!!!!TBC how to get the size of file in DotBot!!!!!!!!!!!!!!!
-    //evidence->file.size = NULL;
     if (evidence == NULL){
         return ATTESTATION_ERROR_EVIDENCE;
     }
