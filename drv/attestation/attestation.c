@@ -24,8 +24,8 @@
 #define MAX_TAG_ID              (32U)
 
 #define IANA_CBOR_COSWID_FILE_FS_NAME_KEY 24
-#define IANA_CBOR_COSWID_FILE_SIZE_KEY 20
-//#define IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY 7
+//#define IANA_CBOR_COSWID_FILE_SIZE_KEY 20
+#define IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY 7
 #define IANA_CBOR_COSWID_FILE_KEY 17
 
 #define IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY  31
@@ -294,12 +294,12 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
     *token_size += cborencoder_put_map(&buffer[*token_size], 1); //changeable, one evidence element
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_KEY); 
     *token_size += cborencoder_put_array(&buffer[*token_size], 1); // changeable, one file in the array
-    *token_size += cborencoder_put_map(&buffer[*token_size], 3); //fixed, three index for the file map
+    *token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 index for the file map
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_FS_NAME_KEY); 
     *token_size += cborencoder_put_text(&buffer[*token_size], evidence->file.fs_name, strlen(evidence->file.fs_name));
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_SIZE_KEY);
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_SIZE_KEY);
     //*token_size += cborencoder_put_unsigned(&buffer[*token_size], evidence->file.size); // need to extend the put_unsigned function 
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY);
+    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY);
     *token_size += cborencoder_put_array(&buffer[*token_size], 2); //fixed, two attributes in hashed value array
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate sha256
     *token_size += cborencoder_put_bytes(&buffer[*token_size], evidence->file.hash_image, HASH_LEN);
