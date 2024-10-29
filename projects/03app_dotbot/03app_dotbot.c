@@ -233,14 +233,14 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
 //=========================== main =============================================
 
 int main(void) {
-    db_board_init();
+    //db_board_init();
     
     db_gpio_init(&p023, DB_GPIO_OUT);
     db_gpio_init(&p020, DB_GPIO_OUT); //sync otii
 #ifdef ENABLE_DOTBOT_LOG_DATA
     db_log_flash_init(LOG_DATA_DOTBOT);
 #endif
-//    db_protocol_init();
+    db_protocol_init();
 //#ifdef DB_RGB_LED_PWM_RED_PORT
 //    db_rgbled_pwm_init(&rgbled_pwm_conf);
 //#endif
@@ -403,7 +403,8 @@ int main(void) {
             db_gpio_set(&p023);
 
             memcpy(++ptr, message_3.content, message_3.len);
-            size_t length = sizeof(protocol_header_t) + 1 + message_3.len;
+            size_t ph = sizeof(protocol_header_t);
+            size_t length = ph + 1 + message_3.len;
             db_radio_disable();
             db_radio_tx(_dotbot_vars.radio_buffer, length);
             _dotbot_vars.gateway_authenticated = true;
