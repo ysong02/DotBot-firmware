@@ -9,7 +9,6 @@
  */
 #include <stdio.h>
 #include <stdint.h>
-#include <stdint.h>
 #include "partition.h"
 #include "attestation.h"
 #include "sha256.h"

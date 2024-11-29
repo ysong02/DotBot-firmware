@@ -128,6 +128,7 @@ static const db_ota_conf_t _bootloader_ota_config = {
 
 //================================= main =======================================
 
+
 int main(void) {
     db_read_partitions_table(&_bootloader_vars.table);
 
