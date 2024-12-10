@@ -120,7 +120,6 @@ static void _update_move_raw_command(protocol_move_raw_command_t *command) {
 
 //=========================== main =============================================
 
-
 int main(void) {
     _gw_vars.led1_blink = true;
     // Initialize user feedback LEDs

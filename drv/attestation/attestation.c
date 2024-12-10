@@ -288,7 +288,7 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
     *token_size += cborencoder_put_map(&buffer[*token_size], 1); //changeable, one evidence element
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_KEY); 
     *token_size += cborencoder_put_array(&buffer[*token_size], 1); // changeable, one file in the array
-    *token_size += cborencoder_put_map(&buffer[*token_size], 3); //fixed, three index for the file map
+    *token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, two index for the file map
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_FS_NAME_KEY); 
     *token_size += cborencoder_put_text(&buffer[*token_size], evidence->file.fs_name, strlen(evidence->file.fs_name));
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY);
@@ -495,37 +495,38 @@ static attestation_status_t edhoc_initial_attest_signature(uint8_t *signature, c
 
 attestation_status_t edhoc_initial_attest_signed_token(const uint8_t *challenge, uint8_t *token_buf, uint8_t *token_size){
 
-//the whole signed token size
-*token_size = 0;
-uint8_t protected_header_start = 0;
-uint8_t protected_header_end = 0;
-//headers
-status = edhoc_initial_attest_encode_cose_headers(token_buf, token_size, &protected_header_start, &protected_header_end);
-if (status!=0){
-    printf("error: %d\n", status);
-    return status;
-}
-uint8_t payload_start = *token_size;
-uint8_t payload_size = 0;
-uint8_t pre_token_buf[MAX_TOKEN];
-uint32_t image_size = 0;
+    //the whole signed token size
+    *token_size = 0;
+    uint8_t protected_header_start = 0;
+    uint8_t protected_header_end = 0;
 
-//payload encoded in CBOR to be a bstr
-status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
-status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
-status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
-status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash); 
+    //headers
+    status = edhoc_initial_attest_encode_cose_headers(token_buf, token_size, &protected_header_start, &protected_header_end);
+    if (status!=0){
+        printf("error: %d\n", status);
+        return status;
+    }
+    uint8_t payload_start = *token_size;
+    uint8_t payload_size = 0;
+    uint8_t pre_token_buf[MAX_TOKEN];
+    uint32_t image_size = 0;
+
+    //payload encoded in CBOR to be a bstr
+    status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
+    status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
+    status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
+    status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash); 
 
 
-//payload as a bstr to be encoded
-*token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
+    //payload as a bstr to be encoded
+    *token_size += cborencoder_put_bytes(&token_buf[*token_size], pre_token_buf, payload_size);
 
-//signature
-status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *token_size-payload_start, private_key, public_key, token_buf, token_size, &protected_header_start, &protected_header_end);
-if (status!=0){
-    return ATTESTATION_ERROR_SIGNATURE;
-}
-return ATTESTATION_SUCCESS;
+    //signature
+    status = edhoc_initial_attest_signature(signature, &token_buf[payload_start], *token_size-payload_start, private_key, public_key, token_buf, token_size, &protected_header_start, &protected_header_end);
+    if (status!=0){
+        return ATTESTATION_ERROR_SIGNATURE;
+    }
+    return ATTESTATION_SUCCESS;
 }
 
 void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
