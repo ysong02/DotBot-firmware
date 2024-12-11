@@ -16,21 +16,21 @@
 #define ED25519_PRIVATE_KEY_LEN (32U)
 #define ED25519_PUBLIC_KEY_LEN  (32U)
 #define MAX_FS_NAME             (64U)
-#define MAX_ENTITY_NAME         (32U)
-#define MAX_SOFTWARE_NAME       (32U)
-#define MAX_TAG_ID              (32U)
+//#define MAX_ENTITY_NAME         (32U)
+//#define MAX_SOFTWARE_NAME       (32U)
+//#define MAX_TAG_ID              (32U)
 
 #define IANA_CBOR_COSWID_FILE_FS_NAME_KEY 24
 #define IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY 7
 #define IANA_CBOR_COSWID_FILE_KEY 17
 
-#define IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY  31
-#define IANA_CBOR_COSWID_ENTITY_ROLE  33
+//#define IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY  31
+//#define IANA_CBOR_COSWID_ENTITY_ROLE  33
 
-#define IANA_CBOR_COSWID_TAG_ID_KEY  0
+//#define IANA_CBOR_COSWID_TAG_ID_KEY  0
 #define IANA_CBOR_COSWID_TAG_VERSION_KEY 12
-#define IANA_CBOR_COSWID_SOFTWARE_NAME_KEY  1
-#define IANA_CBOR_COSWID_ENTITY_KEY  2
+//#define IANA_CBOR_COSWID_SOFTWARE_NAME_KEY  1
+//#define IANA_CBOR_COSWID_ENTITY_KEY  2
 #define IANA_CBOR_COSWID_EVIDENCE_KEY  3
 
 #define IANA_CBOR_EAT_UEID_KEY  256
@@ -56,19 +56,19 @@ typedef struct
 }evidence_t;
 
 //define CoSWID entity
-typedef struct 
-{
-    char entity_name[MAX_ENTITY_NAME];  //(index 31)
-    uint8_t role; //(index 33)
-}entity_t;
+//typedef struct 
+//{
+//    char entity_name[MAX_ENTITY_NAME];  //(index 31)
+//    uint8_t role; //(index 33)
+//}entity_t;
  
 //define CoSWID 
 typedef struct 
 {
-    char tag_id[MAX_TAG_ID]; //(index 0)
+    //char tag_id[MAX_TAG_ID]; //(index 0)
     uint8_t tag_version;  //(index 12)
-    char software_name[MAX_SOFTWARE_NAME];  //(index 1)
-    entity_t entity;  //(index 2)
+    //char software_name[MAX_SOFTWARE_NAME];  //(index 1)
+    //entity_t entity;  //(index 2)
     evidence_t evidence; //(index 3)
 }coswid_t;
 
@@ -309,17 +309,17 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
  * @brief get the encoding format 
  */
 static attestation_status_t edhoc_initial_attest_encode_measurements(uint8_t *buffer, measurements_claim_t *measurements, uint8_t *token_size){
-    *token_size += cborencoder_put_map(&buffer[*token_size], 5);  //fixed, 5 elements in measurements claim
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_ID_KEY);
-    *token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.tag_id, strlen(measurements->coswid.tag_id));
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_SOFTWARE_NAME_KEY);
-    *token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.software_name, strlen(measurements->coswid.software_name));
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_KEY);
-    *token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 elements in entity
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY);
-    *token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.entity.entity_name, strlen(measurements->coswid.entity.entity_name));
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ROLE);
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate tag creator 
+    *token_size += cborencoder_put_map(&buffer[*token_size], 2);  //fixed, 5 elements in measurements claim
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_ID_KEY);
+    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.tag_id, strlen(measurements->coswid.tag_id));
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_SOFTWARE_NAME_KEY);
+    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.software_name, strlen(measurements->coswid.software_name));
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_KEY);
+    //*token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 elements in entity
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY);
+    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.entity.entity_name, strlen(measurements->coswid.entity.entity_name));
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ROLE);
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate tag creator 
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_VERSION_KEY);
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], measurements->coswid.tag_version); //changeable when the attestation service is recalled, fix to 0 for onboarding check
     
@@ -426,13 +426,13 @@ static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evid
 static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements_claim_t *claim, uint8_t *token_buf, uint8_t *token_size){
     claim->content_format_id = IANA_COAP_CONTENT_FORMATS_SWID;
     //strcpy(claim->coswid.tag_id, "aaa");
-    strcpy(claim->coswid.tag_id, "");
-    //claim->coswid.tag_version = 0;
+    //strcpy(claim->coswid.tag_id, "");
+    claim->coswid.tag_version = 0;
     //strcpy(claim->coswid.software_name, "DotBot firmware image 1");
-    strcpy(claim->coswid.software_name, "DotBot");
+    //strcpy(claim->coswid.software_name, "DotBot");
     //strcpy(claim->coswid.entity.entity_name, "Attester");
-    strcpy(claim->coswid.entity.entity_name, "");
-    claim->coswid.entity.role = 1;
+    //strcpy(claim->coswid.entity.entity_name, "");
+    //claim->coswid.entity.role = 1;
          
     if (claim == NULL){
         return ATTESTATION_ERROR_MEASUREMENTS;
@@ -447,7 +447,8 @@ static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements
  * @brief collect other infos then create the payload in CBOR
  */
 static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t challenge[8], size_t challenge_size, token_t *token, uint8_t *token_buf, uint8_t *token_size){
-    memcpy(token->ueid, "aaabbcc", strlen("aaabbcc"));
+    //memcpy(token->ueid, "DotBot2", strlen("DotBot2"));
+    memcpy(token->ueid, "momo", strlen("momo"));
     memcpy(token->nonce, challenge, challenge_size);
 
     if (token == NULL){
