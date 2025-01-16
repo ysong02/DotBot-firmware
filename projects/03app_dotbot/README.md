@@ -13,3 +13,9 @@ and with a nRF52840-DK connected to it and used as gateway. The nRF52840-DK must
 ![DotBot demo](../../doc/sphinx/_static/images/03app_dotbot.gif)
 
 </div>
+
+# Things with Remote Attestation
+- add case `DB_PROTOCOL_EDHOC_MSG`
+- achieved Remote Attestation with EDHOC
+- added library in dev/attestation for evidence generation, with a minimal work sample in projects/01bsp_attestation (only for evidence generation)
+- need to import lakers library from the local
