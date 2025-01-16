@@ -32,8 +32,7 @@
 //#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
 #include "lakers.h"
 #include "attestation.h"
-#include "partition.h"
-#include "sha256.h"
+#include <stdio.h>
 
 #ifdef CRYPTO_PSA
 extern void mbedtls_memory_buffer_alloc_init(uint8_t *buf, size_t len);
@@ -306,8 +305,6 @@ int main(void) {
                 &id_cred_r,
                 &ead_2
             );
-
-            printf("%02x", id_cred_r.bytes.content);
 
             if (res != 0) {
                 printf("Error parse msg2: %d\n", res);
