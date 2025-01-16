@@ -131,16 +131,14 @@ static uint8_t c_r = 0;
 static EdhocMessageBuffer message_2 = {0};
 static EdhocMessageBuffer message_3 = {0};
 
-//used druing execution of attestation
+// used during execution of attestation
 static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
-//used for execution of eads
 
-//used during execution of ead_3
+// used during execution of ead_3
 uint8_t decoded_nonce[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
 uint32_t decoded_evidence_type;
 uint8_t decoded_nonce_length = 0;
 uint8_t token_size;
-
 
 //=========================== prototypes =======================================
 
@@ -216,6 +214,7 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
                 _dotbot_vars.control_mode = ControlAuto;
             }
         } break;
+        //add EDHOC case
         case DB_PROTOCOL_EDHOC_MSG:
         {
             uint8_t buffer_len = len - sizeof(protocol_header_t) - 2; // why -2?
@@ -263,10 +262,11 @@ int main(void) {
     db_lh2_start();
 
     //yuxuan: i don't know what it is for; but will have error without it
+    // EDHOC starts
     uint8_t buffer[4096 * 2] = {0};
     mbedtls_memory_buffer_alloc_init(buffer, 4096 * 2);
 
-    puts("Initializing EDHOC and EAD attestation");
+    puts("Initializing EDHOC and attestation");
     credential_new(&cred_i, CRED_I[EDHOC_INITIATOR_INDEX], sizeof(CRED_I[EDHOC_INITIATOR_INDEX]) / sizeof(CRED_I[EDHOC_INITIATOR_INDEX][0]));
     credential_new(&expected_cred_r, CRED_R, sizeof(CRED_R));
     initiator_new(&initiator);
@@ -297,7 +297,7 @@ int main(void) {
             } else if (_dotbot_vars.update_edhoc && edhoc_state == 1) {
             _dotbot_vars.update_edhoc = false;
             
-            //received message 2
+            // received message 2
             memcpy(&message_2.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
             message_2.len = _dotbot_vars.edhoc_buffer.len;
             int8_t res = initiator_parse_message_2(
@@ -321,7 +321,7 @@ int main(void) {
                 return 1;
             }
 
-            //attestation ead_2
+            // attestation ead_2
             puts("processing ead_2");
             printf("\n");           
 
@@ -338,12 +338,12 @@ int main(void) {
                 continue;
             }
 
-            //decode ead_2, get the selected evidence type and nonce
+            // decode ead_2, get the selected evidence type and nonce
             if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
-                //check the selected evidence type is the provided one
+                // check the selected evidence type is the provided one
                 if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
                     puts("preparing ead_3");
-                    //size of max ead_3 value needs to be adjusted
+                    // size of max ead_3 value needs to be adjusted
                     prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
                 }
             }else {

@@ -35,9 +35,6 @@ typedef enum {
 
 uint8_t cborencoder_put_array(uint8_t *buffer, uint8_t elements);
 uint8_t cborencoder_put_unsigned(uint8_t *buffer, unsigned long value);
-/**
- * @brief encode the array an bytes in CBOR, and return a int indicating the length of cbor output
- */
 
 uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decoded_bytes, uint8_t *decoded_length);
 /**
@@ -46,7 +43,7 @@ uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decode
 
 attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8], uint8_t *token_buf, uint8_t *token_size);
 /**
- * @brief generate a COSE_Sign1 token 
+ * @brief generate a COSE_Sign1 token, which serves as evidence 
  */
 void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical);
 void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
