@@ -8,11 +8,12 @@
  *
  * @copyright Inria, 2022
  */
-#include <nrf.h>
-#include <nrf_peripherals.h>
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <nrf.h>
+#include <nrf_peripherals.h>
 #include "clock.h"
 #include "timer.h"
 
@@ -46,19 +47,19 @@ static uint32_t _ms_to_ticks(uint32_t ms);
 static const timer_conf_t _devs[RTC_COUNT] = {
 #if defined(NRF5340_XXAA)
     {
-#if defined(NRF_APPLICATION)
-        .p = NRF_RTC0_S,
-#else
+#if defined(NRF_NETWORK) || defined(NRF_TRUSTZONE_NONSECURE)
         .p = NRF_RTC0_NS,
+#else
+        .p = NRF_RTC0_S,
 #endif
         .irq    = RTC0_IRQn,
         .cc_num = RTC0_CC_NUM - 1,
     },
     {
-#if defined(NRF_APPLICATION)
-        .p = NRF_RTC1_S,
-#else
+#if defined(NRF_NETWORK) || defined(NRF_TRUSTZONE_NONSECURE)
         .p = NRF_RTC1_NS,
+#else
+        .p = NRF_RTC1_S,
 #endif
         .irq    = RTC1_IRQn,
         .cc_num = RTC1_CC_NUM - 1,
@@ -90,8 +91,10 @@ void db_timer_init(timer_t timer) {
     // No delay is running after initialization
     _timer_vars[timer].running = false;
 
+#if !defined(USE_SWARMIT)
     // Configure and start Low Frequency clock
     db_lfclk_init();
+#endif
 
     // Configure the RTC
     _devs[timer].p->TASKS_STOP  = 1;

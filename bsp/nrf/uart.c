@@ -16,6 +16,9 @@
 
 #include "gpio.h"
 #include "uart.h"
+#if defined(NRF5340_XXAA) && defined(NRF_APPLICATION)
+#include "tz.h"
+#endif
 
 //=========================== defines ==========================================
 
@@ -41,19 +44,35 @@ typedef struct {
 static const uart_conf_t _devs[UARTE_COUNT] = {
 #if defined(NRF5340_XXAA) && defined(NRF_APPLICATION)
     {
-        .p   = NRF_UARTE0_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_UARTE0_NS,
+#else
+        .p = NRF_UARTE0_S,
+#endif
         .irq = SERIAL0_IRQn,
     },
     {
-        .p   = NRF_UARTE1_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_UARTE1_NS,
+#else
+        .p = NRF_UARTE1_S,
+#endif
         .irq = SERIAL1_IRQn,
     },
     {
-        .p   = NRF_UARTE2_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_UARTE2_NS,
+#else
+        .p = NRF_UARTE2_S,
+#endif
         .irq = SERIAL2_IRQn,
     },
     {
-        .p   = NRF_UARTE3_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_UARTE3_NS,
+#else
+        .p = NRF_UARTE3_S,
+#endif
         .irq = SERIAL3_IRQn,
     },
 #elif defined(NRF5340_XXAA) && defined(NRF_NETWORK)
@@ -84,6 +103,17 @@ void db_uart_init(uart_t uart, const gpio_t *rx_pin, const gpio_t *tx_pin, uint3
         // On nrf53 configure constant latency mode for better performances with high baudrates
         NRF_POWER->TASKS_CONSTLAT = 1;
     }
+#if defined(NRF_APPLICATION)
+    // Make sure the peripherals are secure, including DMA
+    uint32_t sec_attributes = (SPU_PERIPHID_PERM_SECATTR_Secure << SPU_PERIPHID_PERM_SECATTR_Pos |
+                               SPU_PERIPHID_PERM_SECUREMAPPING_UserSelectable << SPU_PERIPHID_PERM_SECUREMAPPING_Pos |
+                               SPU_PERIPHID_PERM_DMASEC_Secure << SPU_PERIPHID_PERM_DMASEC_Pos);
+    // Apply the permission attributes
+    NRF_SPU_S->PERIPHID[NRF_APPLICATION_PERIPH_ID_SPIM0_SPIS0_TWIM0_TWIS0_UARTE0].PERM = sec_attributes;
+    NRF_SPU_S->PERIPHID[NRF_APPLICATION_PERIPH_ID_SPIM1_SPIS1_TWIM1_TWIS1_UARTE1].PERM = sec_attributes;
+    NRF_SPU_S->PERIPHID[NRF_APPLICATION_PERIPH_ID_SPIM2_SPIS2_TWIM2_TWIS2_UARTE2].PERM = sec_attributes;
+    NRF_SPU_S->PERIPHID[NRF_APPLICATION_PERIPH_ID_SPIM3_SPIS3_TWIM3_TWIS3_UARTE3].PERM = sec_attributes;
+#endif
 #endif
 
     // configure UART pins (RX as input, TX as output);

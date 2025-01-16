@@ -8,12 +8,11 @@
  *
  * @copyright Inria, 2024-present
  */
-#include <nrf.h>
 #include <assert.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <nrf.h>
 
 #include "gpio.h"
 #include "n25q128.h"
@@ -32,11 +31,13 @@
 #define LZ4F_VERSION        100
 #define BUFFER_SIZE         (8192)
 #define UPGATE_BASE_ADDRESS (0x00000000)
+#define UPGATE_TEMP_ADDRESS (0x00400000)
 
 typedef struct {
     const db_upgate_conf_t *config;
     uint8_t                 reply_buffer[UINT8_MAX];
     uint32_t                target_partition;
+    uint32_t                base_addr;
     uint32_t                addr;
     uint32_t                last_packet_acked;
     uint32_t                bistream_size;
@@ -65,19 +66,19 @@ void db_upgate_init(const db_upgate_conf_t *config) {
 
 void db_upgate_start(void) {
     n25q128_init(_upgate_vars.config->n25q128_conf);
-    _upgate_vars.addr = UPGATE_BASE_ADDRESS;
+    _upgate_vars.addr = UPGATE_TEMP_ADDRESS;
     // Erase the corresponding sectors.
     uint32_t sector_count = (_upgate_vars.bistream_size / N25Q128_SECTOR_SIZE) + (_upgate_vars.bistream_size % N25Q128_SECTOR_SIZE != 0);
     printf("Sectors to erase: %u\n", sector_count);
     for (uint32_t sector = 0; sector < sector_count; sector++) {
         uint32_t addr = _upgate_vars.addr + sector * N25Q128_SECTOR_SIZE;
-        printf("Erasing sector %u at %p\n", sector, addr);
+        printf("Erasing sector %u at %p\n", sector, (uint32_t *)addr);
         n25q128_sector_erase(addr);
     }
     puts("");
     uzlib_init();
     _upgate_vars.last_packet_acked = UINT32_MAX;
-    printf("Starting upgate at %p\n\n", _upgate_vars.addr);
+    printf("Starting upgate at %p\n\n", (uint32_t *)_upgate_vars.addr);
 }
 
 void db_upgate_finish(void) {
@@ -91,6 +92,27 @@ void db_upgate_finish(void) {
     }
     puts("Bitstream hashes match!");
 #endif
+
+    // Move bitstream to the base location
+    // Erase the corresponding sectors.
+    _upgate_vars.base_addr = UPGATE_BASE_ADDRESS;
+    uint32_t sector_count  = (_upgate_vars.bistream_size / N25Q128_SECTOR_SIZE) + (_upgate_vars.bistream_size % N25Q128_SECTOR_SIZE != 0);
+
+    for (uint32_t sector = 0; sector < sector_count; sector++) {
+        uint32_t addr = _upgate_vars.base_addr + sector * N25Q128_SECTOR_SIZE;
+        printf("Erasing sector %u at %p\n", sector, (uint32_t *)addr);
+        n25q128_sector_erase(addr);
+    }
+    // Copy and verify the content.
+    for (uint32_t block = 0; block < _upgate_vars.bistream_size / N25Q128_PAGE_SIZE; block++) {
+        printf("Moving %d bytes from %p to %p\n", N25Q128_PAGE_SIZE, (uint32_t *)(_upgate_vars.addr + block * N25Q128_PAGE_SIZE), (uint32_t *)(_upgate_vars.base_addr + block * N25Q128_PAGE_SIZE));
+        n25q128_read(_upgate_vars.addr + block * N25Q128_PAGE_SIZE, _upgate_vars.temp_buffer, N25Q128_PAGE_SIZE);
+        n25q128_program_page(_upgate_vars.base_addr + block * N25Q128_PAGE_SIZE, _upgate_vars.temp_buffer, N25Q128_PAGE_SIZE);
+        n25q128_read(_upgate_vars.base_addr + block * N25Q128_PAGE_SIZE, _upgate_vars.read_buf, N25Q128_PAGE_SIZE);
+        if (memcmp(&_upgate_vars.temp_buffer, _upgate_vars.read_buf, N25Q128_PAGE_SIZE) != 0) {
+            puts("packet doesn't match!!");
+        }
+    }
 
     puts("Finishing upgate");
     // Put SPIM GPIOS as input otherwise the FPGA ends up in a broken state
@@ -145,7 +167,7 @@ void db_upgate_handle_packet(const db_upgate_pkt_t *pkt) {
             _upgate_vars.compressed_length = 0;
             uint32_t base_addr             = _upgate_vars.addr + pkt->chunk_index * BUFFER_SIZE;
             for (uint32_t block = 0; block < pkt->original_size / N25Q128_PAGE_SIZE; block++) {
-                printf("Programming %d bytes at %p\n", N25Q128_PAGE_SIZE, base_addr + block * N25Q128_PAGE_SIZE);
+                printf("Programming %d bytes at %p\n", N25Q128_PAGE_SIZE, (uint32_t *)(base_addr + block * N25Q128_PAGE_SIZE));
                 n25q128_program_page(base_addr + block * N25Q128_PAGE_SIZE, &_upgate_vars.decompressed_buffer[block * N25Q128_PAGE_SIZE], N25Q128_PAGE_SIZE);
                 n25q128_read(base_addr + block * N25Q128_PAGE_SIZE, &_upgate_vars.temp_buffer[block * N25Q128_PAGE_SIZE], N25Q128_PAGE_SIZE);
                 if (memcmp(&_upgate_vars.temp_buffer[block * N25Q128_PAGE_SIZE], &_upgate_vars.temp_buffer[block * N25Q128_PAGE_SIZE], N25Q128_PAGE_SIZE) != 0) {
@@ -164,7 +186,7 @@ void db_upgate_handle_packet(const db_upgate_pkt_t *pkt) {
         }
         uint32_t addr      = _upgate_vars.addr + (pkt->chunk_index - 1) * DB_UPGATE_CHUNK_SIZE;
         size_t   data_size = (pkt->chunk_index == chunk_count - 1 && chunk_count % 2 == 1) ? pkt->original_size : DB_UPGATE_CHUNK_SIZE + pkt->original_size;
-        printf("Programming %d bytes at %p\n", data_size, addr);
+        printf("Programming %d bytes at %p\n", data_size, (uint32_t *)addr);
         n25q128_program_page(addr, _upgate_vars.write_buf, data_size);
         n25q128_read(addr, _upgate_vars.read_buf, data_size);
         if (memcmp(_upgate_vars.write_buf, _upgate_vars.read_buf, data_size) != 0) {

@@ -9,12 +9,10 @@
  * @copyright Inria, 2023
  */
 
-#include <assert.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 
-#include "nrf.h"
+#include <nrf.h>
 #include "nvmc.h"
 #include "partition.h"
 
@@ -22,10 +20,12 @@
 
 //=========================== defines =========================================
 
-#if defined(NRF5340_XXAA) && defined(NRF_APPLICATION)
-#define NRF_NVMC NRF_NVMC_S
-#elif defined(NRF5340_XXAA) && defined(NRF_NETWORK)
+#if defined(NRF5340_XXAA)
+#if defined(NRF_NETWORK) || defined(NRF_TRUSTZONE_NONSECURE)
 #define NRF_NVMC NRF_NVMC_NS
+#elif defined(NRF_APPLICATION)
+#define NRF_NVMC NRF_NVMC_S
+#endif
 #endif
 
 #define DB_PARTITIONS_TABLE_ADDRESS (0x00001000UL + DB_FLASH_OFFSET)

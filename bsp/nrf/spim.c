@@ -9,7 +9,6 @@
  * @copyright Inria, 2024-present
  */
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -37,28 +36,44 @@ typedef struct {
 static const spim_conf_t _devs[SPIM_COUNT] = {
 #if defined(NRF5340_XXAA)
     {
-#if defined(NRF_APPLICATION)
-        .p = NRF_SPIM0_S,
-#else
+#if defined(NRF_NETWORK) || defined(NRF_TRUSTZONE_NONSECURE)
         .p = NRF_SPIM0_NS,
+#else
+        .p = NRF_SPIM0_S,
 #endif
         .irq = SERIAL0_IRQn,
     },
 #if defined(NRF_APPLICATION)
     {
-        .p   = NRF_SPIM1_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_SPIM1_NS,
+#else
+        .p = NRF_SPIM1_S,
+#endif
         .irq = SERIAL1_IRQn,
     },
     {
-        .p   = NRF_SPIM2_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_SPIM2_NS,
+#else
+        .p = NRF_SPIM2_S,
+#endif
         .irq = SERIAL2_IRQn,
     },
     {
-        .p   = NRF_SPIM3_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_SPIM3_NS,
+#else
+        .p = NRF_SPIM3_S,
+#endif
         .irq = SERIAL3_IRQn,
     },
     {
-        .p   = NRF_SPIM4_S,
+#if defined(NRF_TRUSTZONE_NONSECURE)
+        .p = NRF_SPIM4_NS,
+#else
+        .p = NRF_SPIM4_S,
+#endif
         .irq = SPIM4_IRQn,
     },
 #endif
@@ -92,9 +107,9 @@ void db_spim_init(spim_t spim, const db_spim_conf_t *conf) {
     db_hfclk_init();
 
     // configure SPIM pins
-    db_gpio_init(conf->mosi, DB_GPIO_OUT);
-    db_gpio_init(conf->sck, DB_GPIO_OUT);
-    db_gpio_init(conf->miso, DB_GPIO_IN);
+    db_gpio_init(conf->mosi, DB_GPIO_IN_PD);
+    db_gpio_init(conf->sck, DB_GPIO_IN_PD);
+    db_gpio_init(conf->miso, DB_GPIO_IN_PD);
 
     nrf_port[conf->sck->port]->PIN_CNF[conf->sck->pin] |= GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos;
     nrf_port[conf->mosi->port]->PIN_CNF[conf->mosi->pin] |= (GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos);
