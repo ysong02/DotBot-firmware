@@ -10,7 +10,7 @@
     <configuration
       Name="Debug"
       c_preprocessor_definitions="CRYPTO_ PSA"
-      linker_additional_files="C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/thumbv7em-none-eabihf/debug/liblakers_c.a"
+      linker_additional_files="C:\\Users\\yusong\\Downloads\\lakers-c\\liblakers_c.a"
       linker_output_format="bin" />
     <configuration
       Name="Release"

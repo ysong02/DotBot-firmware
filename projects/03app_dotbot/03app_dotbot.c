@@ -63,6 +63,7 @@ extern void mbedtls_memory_buffer_alloc_init(uint8_t *buf, size_t len);
 #define DB_ANGULAR_SIDE_FACTOR  (1)    ///< Angular side factor
 #endif
 #define EDHOC_INITIATOR_INDEX 0
+#define MAX_EAD_ITEMS 2
 
 typedef struct {
     uint32_t                 ts_last_packet_received;            ///< Last timestamp in microseconds a control packet was received
@@ -86,6 +87,12 @@ typedef struct {
     EdhocMessageBuffer       edhoc_buffer;                       ///< Internal buffer to store received but not yet handled edhoc messages
     uint8_t                  prk_out[SHA256_DIGEST_LEN];
 } dotbot_vars_t;
+
+// for mutual attestation
+typedef struct {
+    EADItemC items[MAX_EAD_ITEMS] ;
+    size_t count;
+} ead_vars_t;
 
 //=========================== variables ========================================
 
@@ -130,9 +137,11 @@ static EdhocMessageBuffer message_1 = {0};
 static uint8_t c_r = 0;
 static EdhocMessageBuffer message_2 = {0};
 static EdhocMessageBuffer message_3 = {0};
+//static EdhocMessageBuffer message_4 = {0};
 
 //used druing execution of attestation
 static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
+//, ead_4 = {0};
 //used for execution of eads
 
 //used during execution of ead_3
@@ -140,15 +149,16 @@ uint8_t decoded_nonce[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
 uint32_t decoded_evidence_type;
 uint8_t decoded_nonce_length = 0;
 uint8_t token_size;
+uint8_t session_msg_2 = 0;
 
 
 //=========================== prototypes =======================================
 
-static void _timeout_check(void);
-static void _advertise(void);
-static void _compute_angle(const protocol_lh2_location_t *next, const protocol_lh2_location_t *origin, int16_t *angle);
-static void _update_control_loop(void);
-static void _update_lh2(void);
+//static void _timeout_check(void);
+//static void _advertise(void);
+//static void _compute_angle(const protocol_lh2_location_t *next, const protocol_lh2_location_t *origin, int16_t *angle);
+//static void _update_control_loop(void);
+//static void _update_lh2(void);
 
 //=========================== callbacks ========================================
 
@@ -176,46 +186,46 @@ static void radio_callback(uint8_t *pkt, uint8_t len) {
     uint8_t *cmd_ptr = ptk_ptr + sizeof(protocol_header_t);
     // parse received packet and update the motors' speeds
     switch (header->type) {
-        case DB_PROTOCOL_CMD_MOVE_RAW:
-        {
-            protocol_move_raw_command_t *command = (protocol_move_raw_command_t *)cmd_ptr;
-            int16_t                      left    = (int16_t)(100 * ((float)command->left_y / INT8_MAX));
-            int16_t                      right   = (int16_t)(100 * ((float)command->right_y / INT8_MAX));
-            db_motors_set_speed(left, right);
-        } break;
-        case DB_PROTOCOL_CMD_RGB_LED:
-        {
-            protocol_rgbled_command_t *command = (protocol_rgbled_command_t *)cmd_ptr;
-            db_rgbled_pwm_set_color(command->r, command->g, command->b);
-        } break;
-        case DB_PROTOCOL_LH2_LOCATION:
-        {
-            const protocol_lh2_location_t *location = (const protocol_lh2_location_t *)cmd_ptr;
-            int16_t                        angle    = -1000;
-            _compute_angle(location, &_dotbot_vars.last_location, &angle);
-            if (angle != DB_DIRECTION_INVALID) {
-                _dotbot_vars.last_location.x = location->x;
-                _dotbot_vars.last_location.y = location->y;
-                _dotbot_vars.last_location.z = location->z;
-                _dotbot_vars.direction       = angle;
-            }
-            _dotbot_vars.update_control_loop = (_dotbot_vars.control_mode == ControlAuto);
-        } break;
-        case DB_PROTOCOL_CONTROL_MODE:
-            db_motors_set_speed(0, 0);
-            break;
-        case DB_PROTOCOL_LH2_WAYPOINTS:
-        {
-            db_motors_set_speed(0, 0);
-            _dotbot_vars.control_mode        = ControlManual;
-            _dotbot_vars.waypoints.length    = (uint8_t)*cmd_ptr++;
-            _dotbot_vars.waypoints_threshold = (uint32_t)((uint8_t)*cmd_ptr++ * 1000);
-            memcpy(&_dotbot_vars.waypoints.points, cmd_ptr, _dotbot_vars.waypoints.length * sizeof(protocol_lh2_location_t));
-            _dotbot_vars.next_waypoint_idx = 0;
-            if (_dotbot_vars.waypoints.length > 0) {
-                _dotbot_vars.control_mode = ControlAuto;
-            }
-        } break;
+        //case DB_PROTOCOL_CMD_MOVE_RAW:
+        //{
+        //    protocol_move_raw_command_t *command = (protocol_move_raw_command_t *)cmd_ptr;
+        //    int16_t                      left    = (int16_t)(100 * ((float)command->left_y / INT8_MAX));
+        //    int16_t                      right   = (int16_t)(100 * ((float)command->right_y / INT8_MAX));
+        //    db_motors_set_speed(left, right);
+        //} break;
+        //case DB_PROTOCOL_CMD_RGB_LED:
+        //{
+        //    protocol_rgbled_command_t *command = (protocol_rgbled_command_t *)cmd_ptr;
+        //    db_rgbled_pwm_set_color(command->r, command->g, command->b);
+        //} break;
+        //case DB_PROTOCOL_LH2_LOCATION:
+        //{
+        //    const protocol_lh2_location_t *location = (const protocol_lh2_location_t *)cmd_ptr;
+        //    int16_t                        angle    = -1000;
+        //    //_compute_angle(location, &_dotbot_vars.last_location, &angle);
+        //    //if (angle != DB_DIRECTION_INVALID) {
+        //    //    _dotbot_vars.last_location.x = location->x;
+        //    //    _dotbot_vars.last_location.y = location->y;
+        //    //    _dotbot_vars.last_location.z = location->z;
+        //    //    _dotbot_vars.direction       = angle;
+        //    }
+        //    _dotbot_vars.update_control_loop = (_dotbot_vars.control_mode == ControlAuto);
+        //} break;
+        //case DB_PROTOCOL_CONTROL_MODE:
+        //    db_motors_set_speed(0, 0);
+        //    break;
+        //case DB_PROTOCOL_LH2_WAYPOINTS:
+        //{
+        //    db_motors_set_speed(0, 0);
+        //    _dotbot_vars.control_mode        = ControlManual;
+        //    _dotbot_vars.waypoints.length    = (uint8_t)*cmd_ptr++;
+        //    _dotbot_vars.waypoints_threshold = (uint32_t)((uint8_t)*cmd_ptr++ * 1000);
+        //    memcpy(&_dotbot_vars.waypoints.points, cmd_ptr, _dotbot_vars.waypoints.length * sizeof(protocol_lh2_location_t));
+        //    _dotbot_vars.next_waypoint_idx = 0;
+        //    if (_dotbot_vars.waypoints.length > 0) {
+        //        _dotbot_vars.control_mode = ControlAuto;
+        //    }
+        //} break;
         case DB_PROTOCOL_EDHOC_MSG:
         {
             uint8_t buffer_len = len - sizeof(protocol_header_t) - 2; // why -2?
@@ -256,11 +266,11 @@ int main(void) {
     _dotbot_vars.device_id = db_device_id();
 
     db_timer_init(TIMER_DEV);
-    db_timer_set_periodic_ms(TIMER_DEV, 0, DB_TIMEOUT_CHECK_DELAY_MS, &_timeout_check);
-    db_timer_set_periodic_ms(TIMER_DEV, 1, DB_ADVERTIZEMENT_DELAY_MS, &_advertise);
-    db_timer_set_periodic_ms(TIMER_DEV, 2, DB_LH2_UPDATE_DELAY_MS, &_update_lh2);
-    db_lh2_init(&_dotbot_vars.lh2, &db_lh2_d, &db_lh2_e);
-    db_lh2_start();
+    //db_timer_set_periodic_ms(TIMER_DEV, 0, DB_TIMEOUT_CHECK_DELAY_MS, &_timeout_check);
+    //db_timer_set_periodic_ms(TIMER_DEV, 1, DB_ADVERTIZEMENT_DELAY_MS, &_advertise);
+    //db_timer_set_periodic_ms(TIMER_DEV, 2, DB_LH2_UPDATE_DELAY_MS, &_update_lh2);
+    //db_lh2_init(&_dotbot_vars.lh2, &db_lh2_d, &db_lh2_e);
+    //db_lh2_start();
 
     //yuxuan: i don't know what it is for; but will have error without it
     uint8_t buffer[4096 * 2] = {0};
@@ -284,6 +294,11 @@ int main(void) {
             edhoc_state = 1;
             printf("Beginning handshake...\n");
             prepare_ead_1(&ead_1, 1, true);
+            printf("ead 1 is\n");
+            for(uint8_t i = 0; i < ead_1.value.len; i++) {
+                printf("%02x", ead_1.value.content[i]);
+            }
+            printf("\n");
             
             puts("preparing message_1...\n");
             initiator_prepare_message_1(&initiator, NULL, &ead_1, &message_1);
@@ -293,236 +308,258 @@ int main(void) {
             size_t length = sizeof(protocol_header_t) + message_1.len;
             db_radio_disable();
             db_radio_tx(_dotbot_vars.radio_buffer, length);
+            printf("message 1 content:");
+            for(uint8_t i = 0; i < length; i++) {
+                printf("%02x", _dotbot_vars.radio_buffer[i]);
+            }
+            printf("\n");
             puts("sent msg1.");
             } else if (_dotbot_vars.update_edhoc && edhoc_state == 1) {
             _dotbot_vars.update_edhoc = false;
-            
-            //received message 2
-            memcpy(&message_2.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
-            message_2.len = _dotbot_vars.edhoc_buffer.len;
-            int8_t res = initiator_parse_message_2(
-                &initiator,
-                &message_2,
-                &c_r,
-                &id_cred_r,
-                &ead_2
-            );
+            if (session_msg_2 == 0){
 
-            printf("%02x", id_cred_r.bytes.content);
+                //received message 2
+                memcpy(&message_2.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
+                message_2.len = _dotbot_vars.edhoc_buffer.len;
+                int8_t res = initiator_parse_message_2(
+                    &initiator,
+                    &message_2,
+                    &c_r,
+                    &id_cred_r,
+                    &ead_2
+                );
 
-            if (res != 0) {
-                printf("Error parse msg2: %d\n", res);
-                edhoc_state = -1;
-                continue;
-            }
-            res = credential_check_or_fetch(&expected_cred_r, &id_cred_r, &fetched_cred_r);
-            if (res != 0) {
-                printf("Error handling credential: %d\n", res);
-                return 1;
-            }
+                printf("%02x", id_cred_r.bytes.content);
 
-            //attestation ead_2
-            puts("processing ead_2");
-            printf("\n");           
-
-            if (ead_2.value.len == 0) {
-                printf("Error process ead2 (attestation request is empty): %d\n", res);
-                edhoc_state = -1;
-                continue;
-            } 
-
-            res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
-            if (res != 0) {
-                printf("Error verify msg2: %d\n", res);
-                edhoc_state = -1;
-                continue;
-            }
-
-            //decode ead_2, get the selected evidence type and nonce
-            if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
-                //check the selected evidence type is the provided one
-                if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
-                    puts("preparing ead_3");
-                    //size of max ead_3 value needs to be adjusted
-                    prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
+                if (res != 0) {
+                    printf("Error parse msg2: %d\n", res);
+                    edhoc_state = -1;
+                    continue;
                 }
-            }else {
-                printf("decode ead_2 fail");
+                res = credential_check_or_fetch(&expected_cred_r, &id_cred_r, &fetched_cred_r);
+                if (res != 0) {
+                    printf("Error handling credential: %d\n", res);
+                    return 1;
                 }
 
-            puts("preparing msg3");
-            res = initiator_prepare_message_3(&initiator, ByReference, &ead_3, &message_3, &_dotbot_vars.prk_out);
-            if (res != 0) {
-                printf("Error prep msg3: %d\n", res);
-                edhoc_state = -1;
-                continue;
-            }
+                //attestation ead_2
+                puts("processing ead_2");
+                printf("\n");           
 
-            db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
-            uint8_t *ptr = _dotbot_vars.radio_buffer + sizeof(protocol_header_t);
-            *ptr = c_r;
-            memcpy(++ptr, message_3.content, message_3.len);
-            size_t length = sizeof(protocol_header_t) + 1 + message_3.len;
-            db_radio_disable();
-            db_radio_tx(_dotbot_vars.radio_buffer, length);
-            _dotbot_vars.gateway_authenticated = true;
+                if (ead_2.value.len == 0) {
+                    printf("Error process ead2 (attestation request is empty): %d\n", res);
+                    edhoc_state = -1;
+                    continue;
+                } 
 
-            printf("\nDotBot <-> Gateway authenticated.\n");
-            printf("Derived key:   ");
-            for (size_t i = 0; i < SHA256_DIGEST_LEN; i++) {
-                printf("%X ", _dotbot_vars.prk_out[i]);
-            }
-            printf("\n");
+                res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
+                if (res != 0) {
+                    printf("Error verify msg2: %d\n", res);
+                    edhoc_state = -1;
+                    continue;
+                }
+
+                //decode ead_2, get the selected evidence type and nonce
+                if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
+                    //check the selected evidence type is the provided one
+                    if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
+                        puts("preparing ead_3");
+                        //size of max ead_3 value needs to be adjusted
+                        prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
+                    }
+                }else {
+                    printf("decode ead_2 fail");
+                    }
+
+                puts("preparing msg3");
+                res = initiator_prepare_message_3(&initiator, ByReference, &ead_3, &message_3, &_dotbot_vars.prk_out);
+                if (res != 0) {
+                    printf("Error prep msg3: %d\n", res);
+                    edhoc_state = -1;
+                    continue;
+                }
+
+                db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
+                uint8_t *ptr = _dotbot_vars.radio_buffer + sizeof(protocol_header_t);
+                *ptr = c_r;
+                memcpy(++ptr, message_3.content, message_3.len);
+                size_t length = sizeof(protocol_header_t) + 1 + message_3.len;
+                db_radio_disable();
+                db_radio_tx(_dotbot_vars.radio_buffer, length);
+                _dotbot_vars.gateway_authenticated = true;
+
+                printf("\nDotBot <-> Gateway authenticated.\n");
+                printf("Derived key:   ");
+                for (size_t i = 0; i < SHA256_DIGEST_LEN; i++) {
+                    printf("%X ", _dotbot_vars.prk_out[i]);
+                }
+                printf("\n");
+                session_msg_2 = 1;
+                }
+            else {
+                //received message 4
+                printf("received message 4.\n");
+                //memcpy(&message_4.content, &_dotbot_vars.edhoc_buffer.content, _dotbot_vars.edhoc_buffer.len);
+                //message_4.len = _dotbot_vars.edhoc_buffer.len;
+                //int8_t res = initiator_process_message_4(
+                //    &initiator,
+                //    &message_4,
+                //    &ead_4
+                //);
+                //if (res == 0){
+                //    printf("finish parsing message 4.\n");
+                //}
+                }
         }
 
         if (!_dotbot_vars.gateway_authenticated) {
           continue;
         }
 
-        bool need_advertize = false;
+        //bool need_advertize = false;
         // Process available lighthouse data
-        db_lh2_process_location(&_dotbot_vars.lh2);
+    //    db_lh2_process_location(&_dotbot_vars.lh2);
 
-        if (_dotbot_vars.update_lh2) {
-            // Check if data is ready to send
-            if (_dotbot_vars.lh2.data_ready[0][0] == DB_LH2_PROCESSED_DATA_AVAILABLE && _dotbot_vars.lh2.data_ready[1][0] == DB_LH2_PROCESSED_DATA_AVAILABLE) {
+    //    if (_dotbot_vars.update_lh2) {
+    //        // Check if data is ready to send
+    //        if (_dotbot_vars.lh2.data_ready[0][0] == DB_LH2_PROCESSED_DATA_AVAILABLE && _dotbot_vars.lh2.data_ready[1][0] == DB_LH2_PROCESSED_DATA_AVAILABLE) {
 
-                db_lh2_stop();
-                // Prepare the radio buffer
-                db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_DOTBOT_DATA);
-                memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t), &_dotbot_vars.direction, sizeof(int16_t));
-                // Add the LH2 sweep
-                for (uint8_t lh2_sweep_index = 0; lh2_sweep_index < LH2_SWEEP_COUNT; lh2_sweep_index++) {
-                    memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t) + sizeof(int16_t) + lh2_sweep_index * sizeof(db_lh2_raw_data_t), &_dotbot_vars.lh2.raw_data[lh2_sweep_index][0], sizeof(db_lh2_raw_data_t));
-                    // Mark the data as already sent
-                    _dotbot_vars.lh2.data_ready[lh2_sweep_index][0] = DB_LH2_NO_NEW_DATA;
-                }
-                size_t length = sizeof(protocol_header_t) + sizeof(int16_t) + sizeof(db_lh2_raw_data_t) * LH2_SWEEP_COUNT;
+    //            db_lh2_stop();
+    //            // Prepare the radio buffer
+    //            db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_DOTBOT_DATA);
+    //            memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t), &_dotbot_vars.direction, sizeof(int16_t));
+    //            // Add the LH2 sweep
+    //            for (uint8_t lh2_sweep_index = 0; lh2_sweep_index < LH2_SWEEP_COUNT; lh2_sweep_index++) {
+    //                memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t) + sizeof(int16_t) + lh2_sweep_index * sizeof(db_lh2_raw_data_t), &_dotbot_vars.lh2.raw_data[lh2_sweep_index][0], sizeof(db_lh2_raw_data_t));
+    //                // Mark the data as already sent
+    //                _dotbot_vars.lh2.data_ready[lh2_sweep_index][0] = DB_LH2_NO_NEW_DATA;
+    //            }
+    //            size_t length = sizeof(protocol_header_t) + sizeof(int16_t) + sizeof(db_lh2_raw_data_t) * LH2_SWEEP_COUNT;
 
-                // Send the radio packet
-                db_radio_disable();
-                db_radio_tx(_dotbot_vars.radio_buffer, length);
+    //            // Send the radio packet
+    //            db_radio_disable();
+    //            db_radio_tx(_dotbot_vars.radio_buffer, length);
 
-                db_lh2_start();
-            } else {
-                _dotbot_vars.lh2_update_counter = (_dotbot_vars.lh2_update_counter + 1) & DB_LH2_COUNTER_MASK;
-                need_advertize                  = (_dotbot_vars.lh2_update_counter == DB_LH2_COUNTER_MASK);
-            }
-            _dotbot_vars.update_lh2 = false;
-        }
+    //            db_lh2_start();
+    //        } else {
+    //            _dotbot_vars.lh2_update_counter = (_dotbot_vars.lh2_update_counter + 1) & DB_LH2_COUNTER_MASK;
+    //            need_advertize                  = (_dotbot_vars.lh2_update_counter == DB_LH2_COUNTER_MASK);
+    //        }
+    //        _dotbot_vars.update_lh2 = false;
+    //    }
 
-        if (_dotbot_vars.update_control_loop) {
-            _update_control_loop();
-            _dotbot_vars.update_control_loop = false;
-        }
+    //    if (_dotbot_vars.update_control_loop) {
+    //        _update_control_loop();
+    //        _dotbot_vars.update_control_loop = false;
+    //    }
 
-        if (_dotbot_vars.advertize && need_advertize) {
-            db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_ADVERTISEMENT);
-            size_t length = sizeof(protocol_header_t);
-            db_radio_disable();
-            db_radio_tx(_dotbot_vars.radio_buffer, length);
-            _dotbot_vars.advertize = false;
-        }
-    }
+    //    if (_dotbot_vars.advertize && need_advertize) {
+    //        db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_ADVERTISEMENT);
+    //        size_t length = sizeof(protocol_header_t);
+    //        db_radio_disable();
+    //        db_radio_tx(_dotbot_vars.radio_buffer, length);
+    //        _dotbot_vars.advertize = false;
+    //    }
+    //}
 }
 
 //=========================== private functions ================================
 
-static void _update_control_loop(void) {
-    if (_dotbot_vars.next_waypoint_idx >= _dotbot_vars.waypoints.length) {
-        db_motors_set_speed(0, 0);
-        return;
-    }
-    float dx               = ((float)_dotbot_vars.waypoints.points[_dotbot_vars.next_waypoint_idx].x - (float)_dotbot_vars.last_location.x) / 1e6;
-    float dy               = ((float)_dotbot_vars.waypoints.points[_dotbot_vars.next_waypoint_idx].y - (float)_dotbot_vars.last_location.y) / 1e6;
-    float distanceToTarget = sqrtf(powf(dx, 2) + powf(dy, 2));
+//static void _update_control_loop(void) {
+//    if (_dotbot_vars.next_waypoint_idx >= _dotbot_vars.waypoints.length) {
+//        db_motors_set_speed(0, 0);
+//        return;
+//    }
+//    float dx               = ((float)_dotbot_vars.waypoints.points[_dotbot_vars.next_waypoint_idx].x - (float)_dotbot_vars.last_location.x) / 1e6;
+//    float dy               = ((float)_dotbot_vars.waypoints.points[_dotbot_vars.next_waypoint_idx].y - (float)_dotbot_vars.last_location.y) / 1e6;
+//    float distanceToTarget = sqrtf(powf(dx, 2) + powf(dy, 2));
 
-    float speedReductionFactor = 1.0;  // No reduction by default
+//    float speedReductionFactor = 1.0;  // No reduction by default
 
-    if ((uint32_t)(distanceToTarget * 1e6) < _dotbot_vars.waypoints_threshold * 2) {
-        speedReductionFactor = DB_REDUCE_SPEED_FACTOR;
-    }
+//    if ((uint32_t)(distanceToTarget * 1e6) < _dotbot_vars.waypoints_threshold * 2) {
+//        speedReductionFactor = DB_REDUCE_SPEED_FACTOR;
+//    }
 
-    int16_t left_speed      = 0;
-    int16_t right_speed     = 0;
-    int16_t angular_speed   = 0;
-    int16_t angle_to_target = 0;
-    int16_t error_angle     = 0;
-    if ((uint32_t)(distanceToTarget * 1e6) < _dotbot_vars.waypoints_threshold) {
-        // Target waypoint is reached
-        _dotbot_vars.next_waypoint_idx++;
-    } else if (_dotbot_vars.direction == DB_DIRECTION_INVALID) {
-        // Unknown direction, just move forward a bit
-        left_speed  = (int16_t)DB_MAX_SPEED * speedReductionFactor;
-        right_speed = (int16_t)DB_MAX_SPEED * speedReductionFactor;
-    } else {
-        // compute angle to target waypoint
-        _compute_angle(&_dotbot_vars.waypoints.points[_dotbot_vars.next_waypoint_idx], &_dotbot_vars.last_location, &angle_to_target);
-        error_angle = angle_to_target - _dotbot_vars.direction;
-        if (error_angle < -180) {
-            error_angle += 360;
-        } else if (error_angle > 180) {
-            error_angle -= 360;
-        }
-        if (error_angle > DB_REDUCE_SPEED_ANGLE || error_angle < -DB_REDUCE_SPEED_ANGLE) {
-            speedReductionFactor = DB_REDUCE_SPEED_FACTOR;
-        }
-        angular_speed = (int16_t)(((float)error_angle / 180) * DB_ANGULAR_SPEED_FACTOR);
-        left_speed    = (int16_t)(((DB_MAX_SPEED * speedReductionFactor) - (angular_speed * DB_ANGULAR_SIDE_FACTOR)));
-        right_speed   = (int16_t)(((DB_MAX_SPEED * speedReductionFactor) + (angular_speed * DB_ANGULAR_SIDE_FACTOR)));
-        if (left_speed > DB_MAX_SPEED) {
-            left_speed = DB_MAX_SPEED;
-        }
-        if (right_speed > DB_MAX_SPEED) {
-            right_speed = DB_MAX_SPEED;
-        }
-    }
+//    int16_t left_speed      = 0;
+//    int16_t right_speed     = 0;
+//    int16_t angular_speed   = 0;
+//    int16_t angle_to_target = 0;
+//    int16_t error_angle     = 0;
+//    if ((uint32_t)(distanceToTarget * 1e6) < _dotbot_vars.waypoints_threshold) {
+//        // Target waypoint is reached
+//        _dotbot_vars.next_waypoint_idx++;
+//    } else if (_dotbot_vars.direction == DB_DIRECTION_INVALID) {
+//        // Unknown direction, just move forward a bit
+//        left_speed  = (int16_t)DB_MAX_SPEED * speedReductionFactor;
+//        right_speed = (int16_t)DB_MAX_SPEED * speedReductionFactor;
+//    } else {
+//        // compute angle to target waypoint
+//        _compute_angle(&_dotbot_vars.waypoints.points[_dotbot_vars.next_waypoint_idx], &_dotbot_vars.last_location, &angle_to_target);
+//        error_angle = angle_to_target - _dotbot_vars.direction;
+//        if (error_angle < -180) {
+//            error_angle += 360;
+//        } else if (error_angle > 180) {
+//            error_angle -= 360;
+//        }
+//        if (error_angle > DB_REDUCE_SPEED_ANGLE || error_angle < -DB_REDUCE_SPEED_ANGLE) {
+//            speedReductionFactor = DB_REDUCE_SPEED_FACTOR;
+//        }
+//        angular_speed = (int16_t)(((float)error_angle / 180) * DB_ANGULAR_SPEED_FACTOR);
+//        left_speed    = (int16_t)(((DB_MAX_SPEED * speedReductionFactor) - (angular_speed * DB_ANGULAR_SIDE_FACTOR)));
+//        right_speed   = (int16_t)(((DB_MAX_SPEED * speedReductionFactor) + (angular_speed * DB_ANGULAR_SIDE_FACTOR)));
+//        if (left_speed > DB_MAX_SPEED) {
+//            left_speed = DB_MAX_SPEED;
+//        }
+//        if (right_speed > DB_MAX_SPEED) {
+//            right_speed = DB_MAX_SPEED;
+//        }
+//    }
 
-    db_motors_set_speed(left_speed, right_speed);
+//    db_motors_set_speed(left_speed, right_speed);
 
-#ifdef ENABLE_DOTBOT_LOG_DATA
-    // Log control loop internal data and output on flash
-    _dotbot_vars.log_data.direction          = (int32_t)_dotbot_vars.direction;
-    _dotbot_vars.log_data.pos_x              = _dotbot_vars.last_location.x;
-    _dotbot_vars.log_data.pos_y              = _dotbot_vars.last_location.y;
-    _dotbot_vars.log_data.next_waypoint_idx  = (uint16_t)_dotbot_vars.next_waypoint_idx;
-    _dotbot_vars.log_data.distance_to_target = (uint32_t)(distanceToTarget * 1e6);
-    _dotbot_vars.log_data.angle_to_target    = angle_to_target;
-    _dotbot_vars.log_data.error_angle        = error_angle;
-    _dotbot_vars.log_data.angular_speed      = angular_speed;
-    _dotbot_vars.log_data.left_speed         = left_speed;
-    _dotbot_vars.log_data.right_speed        = right_speed;
-    db_log_flash_write(&_dotbot_vars.log_data, sizeof(db_log_dotbot_data_t));
-#endif
-}
+//#ifdef ENABLE_DOTBOT_LOG_DATA
+//    // Log control loop internal data and output on flash
+//    _dotbot_vars.log_data.direction          = (int32_t)_dotbot_vars.direction;
+//    _dotbot_vars.log_data.pos_x              = _dotbot_vars.last_location.x;
+//    _dotbot_vars.log_data.pos_y              = _dotbot_vars.last_location.y;
+//    _dotbot_vars.log_data.next_waypoint_idx  = (uint16_t)_dotbot_vars.next_waypoint_idx;
+//    _dotbot_vars.log_data.distance_to_target = (uint32_t)(distanceToTarget * 1e6);
+//    _dotbot_vars.log_data.angle_to_target    = angle_to_target;
+//    _dotbot_vars.log_data.error_angle        = error_angle;
+//    _dotbot_vars.log_data.angular_speed      = angular_speed;
+//    _dotbot_vars.log_data.left_speed         = left_speed;
+//    _dotbot_vars.log_data.right_speed        = right_speed;
+//    db_log_flash_write(&_dotbot_vars.log_data, sizeof(db_log_dotbot_data_t));
+//#endif
+//}
 
-static void _compute_angle(const protocol_lh2_location_t *next, const protocol_lh2_location_t *origin, int16_t *angle) {
-    float dx       = ((float)next->x - (float)origin->x) / 1e6;
-    float dy       = ((float)next->y - (float)origin->y) / 1e6;
-    float distance = sqrtf(powf(dx, 2) + powf(dy, 2));
+//static void _compute_angle(const protocol_lh2_location_t *next, const protocol_lh2_location_t *origin, int16_t *angle) {
+//    float dx       = ((float)next->x - (float)origin->x) / 1e6;
+//    float dy       = ((float)next->y - (float)origin->y) / 1e6;
+//    float distance = sqrtf(powf(dx, 2) + powf(dy, 2));
 
-    if (distance < DB_DIRECTION_THRESHOLD) {
-        return;
-    }
+//    if (distance < DB_DIRECTION_THRESHOLD) {
+//        return;
+//    }
 
-    int8_t sideFactor = (dx > 0) ? -1 : 1;
-    *angle            = (int16_t)(acosf(dy / distance) * 180 / M_PI) * sideFactor;
-    if (*angle < 0) {
-        *angle = 360 + *angle;
-    }
-}
+//    int8_t sideFactor = (dx > 0) ? -1 : 1;
+//    *angle            = (int16_t)(acosf(dy / distance) * 180 / M_PI) * sideFactor;
+//    if (*angle < 0) {
+//        *angle = 360 + *angle;
+//    }
+//}
 
-static void _timeout_check(void) {
-    uint32_t ticks = db_timer_ticks(TIMER_DEV);
-    if (ticks > _dotbot_vars.ts_last_packet_received + TIMEOUT_CHECK_DELAY_TICKS) {
-        db_motors_set_speed(0, 0);
-    }
-}
+//static void _timeout_check(void) {
+//    uint32_t ticks = db_timer_ticks(TIMER_DEV);
+//    if (ticks > _dotbot_vars.ts_last_packet_received + TIMEOUT_CHECK_DELAY_TICKS) {
+//        db_motors_set_speed(0, 0);
+//    }
+//}
 
-static void _advertise(void) {
-    _dotbot_vars.advertize = true;
-}
+//static void _advertise(void) {
+//    _dotbot_vars.advertize = true;
+//}
 
-static void _update_lh2(void) {
-    _dotbot_vars.update_lh2 = true;
+//static void _update_lh2(void) {
+//    _dotbot_vars.update_lh2 = true;
 }

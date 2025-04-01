@@ -537,6 +537,10 @@ void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
     ret += cborencoder_put_array(&ead->value.content[ret], 1);
     ret += cborencoder_put_unsigned(&ead->value.content[ret], PROVIDED_EVIDENCE_TYPE);
     ead->value.len = ret;
+                for(uint8_t i = 0; i < ead->value.len; i++) {
+                printf("%02x", ead->value.content[i]);
+            }
+            printf("\n");
 } 
 
 void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
