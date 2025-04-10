@@ -29,8 +29,8 @@
 #include "rgbled_pwm.h"
 #include "timer.h"
 #include "log_flash.h"
-//#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
-#include "lakers.h"
+//#include "C:/Users/yusong/Downloads/test-edhoc-handshake/old lakers/lakers/target/include/lakers.h"
+#include "C:/Users/yusong/Downloads/lakers/target/include/lakers.h"
 #include "attestation.h"
 #include "partition.h"
 #include "sha256.h"
@@ -140,7 +140,8 @@ static EdhocMessageBuffer message_3 = {0};
 //static EdhocMessageBuffer message_4 = {0};
 
 //used druing execution of attestation
-static EADItemC ead_1 = {0}, ead_2 = {0}, ead_3 = {0};
+static EADItemC  ead_2 = {0};
+//ead_1 = {0}, ead_3 = {0};
 //, ead_4 = {0};
 //used for execution of eads
 
@@ -293,26 +294,27 @@ int main(void) {
         if (edhoc_state ==0) {
             edhoc_state = 1;
             printf("Beginning handshake...\n");
-            prepare_ead_1(&ead_1, 1, true);
-            printf("ead 1 is\n");
-            for(uint8_t i = 0; i < ead_1.value.len; i++) {
-                printf("%02x", ead_1.value.content[i]);
-            }
-            printf("\n");
+            //prepare_ead_1(&ead_1, 1, true);
+            //printf("ead 1 is\n");
+            //for(uint8_t i = 0; i < ead_1.value.len; i++) {
+            //    printf("%02x", ead_1.value.content[i]);
+            //}
+            //printf("\n");
             
             puts("preparing message_1...\n");
-            initiator_prepare_message_1(&initiator, NULL, &ead_1, &message_1);
+            initiator_prepare_message_1(&initiator, NULL, NULL, &message_1);
 
             db_protocol_header_to_buffer(_dotbot_vars.radio_buffer, DB_BROADCAST_ADDRESS, DotBot, DB_PROTOCOL_EDHOC_MSG);
             memcpy(_dotbot_vars.radio_buffer + sizeof(protocol_header_t), message_1.content, message_1.len);
             size_t length = sizeof(protocol_header_t) + message_1.len;
             db_radio_disable();
             db_radio_tx(_dotbot_vars.radio_buffer, length);
-            printf("message 1 content:");
-            for(uint8_t i = 0; i < length; i++) {
-                printf("%02x", _dotbot_vars.radio_buffer[i]);
+            printf("message 1 len = %u, content:", message_1.len);
+            for(uint8_t i = 0; i < message_1.len; i++) {
+                printf("%02x", message_1.content[i]);
             }
             printf("\n");
+  
             puts("sent msg1.");
             } else if (_dotbot_vars.update_edhoc && edhoc_state == 1) {
             _dotbot_vars.update_edhoc = false;
@@ -346,11 +348,11 @@ int main(void) {
                 puts("processing ead_2");
                 printf("\n");           
 
-                if (ead_2.value.len == 0) {
-                    printf("Error process ead2 (attestation request is empty): %d\n", res);
-                    edhoc_state = -1;
-                    continue;
-                } 
+                //if (ead_2.value.len == 0) {
+                //    printf("Error process ead2 (attestation request is empty): %d\n", res);
+                //    edhoc_state = -1;
+                //    continue;
+                //} 
 
                 res = initiator_verify_message_2(&initiator, &I[EDHOC_INITIATOR_INDEX], &cred_i, &fetched_cred_r);
                 if (res != 0) {
@@ -360,19 +362,26 @@ int main(void) {
                 }
 
                 //decode ead_2, get the selected evidence type and nonce
-                if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
-                    //check the selected evidence type is the provided one
-                    if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
-                        puts("preparing ead_3");
-                        //size of max ead_3 value needs to be adjusted
-                        prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);                  
-                    }
-                }else {
-                    printf("decode ead_2 fail");
-                    }
+                //if (decode_ead_2(ead_2.value.content, &decoded_evidence_type, decoded_nonce, &decoded_nonce_length) == 0){  
+                //    //check the selected evidence type is the provided one
+                //    if ((int)decoded_evidence_type == PROVIDED_EVIDENCE_TYPE ){
+                //        puts("preparing ead_3");
+                //        //size of max ead_3 value needs to be adjusted
+                //        prepare_ead_3(&ead_3, 1, true, decoded_nonce, &token_size);     
+                        
+                //        printf("ead 3 is\n");
+                //        for(uint8_t i = 0; i < ead_3.value.len; i++) {
+                //            printf("%02x", ead_3.value.content[i]);
+                //        }
+                //        printf("\n");             
+                //    }
+                //}else {
+                //    printf("decode ead_2 fail");
+                //    }
 
                 puts("preparing msg3");
-                res = initiator_prepare_message_3(&initiator, ByReference, &ead_3, &message_3, &_dotbot_vars.prk_out);
+
+                res = initiator_prepare_message_3(&initiator, ByReference, NULL, &message_3, &_dotbot_vars.prk_out);
                 if (res != 0) {
                     printf("Error prep msg3: %d\n", res);
                     edhoc_state = -1;
@@ -384,8 +393,24 @@ int main(void) {
                 *ptr = c_r;
                 memcpy(++ptr, message_3.content, message_3.len);
                 size_t length = sizeof(protocol_header_t) + 1 + message_3.len;
+
                 db_radio_disable();
                 db_radio_tx(_dotbot_vars.radio_buffer, length);
+
+                printf("message 3 content:");
+                for(uint8_t i = 0; i < message_3.len; i++) {
+                    printf("%02x", message_3.content[i]);
+                }
+                printf("\n");
+                printf("whole message 3 content:");
+                for(uint8_t i = 0; i < length; i++) {
+                    printf("%02x", _dotbot_vars.radio_buffer[i]);
+                }
+
+                printf("\n");
+                printf("message 3 len is: %d\n", message_3.len);
+                printf("whole message 3 length is: %d\n", length);
+
                 _dotbot_vars.gateway_authenticated = true;
 
                 printf("\nDotBot <-> Gateway authenticated.\n");

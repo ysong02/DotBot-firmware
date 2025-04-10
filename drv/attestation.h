@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "partition.h"
-#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
-
+#include "C:/Users/yusong/Downloads/lakers/target/include/lakers.h"
+//#include "C:/Users/yusong/Downloads/test-edhoc-handshake/old lakers/lakers/target/include/lakers.h"
 //=======================defines============================
 
 #define EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8 (8u)

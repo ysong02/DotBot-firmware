@@ -8,19 +8,19 @@
 #include "attestation.h"
 #include "sha256.h"
 #include "ed25519.h"
-#include "C:/Users/yusong/Downloads/test-edhoc-handshake/lakers/target/include/lakers.h"
-
+#include "C:/Users/yusong/Downloads/lakers/target/include/lakers.h"
+//#include "C:/Users/yusong/Downloads/test-edhoc-handshake/old lakers/lakers/target/include/lakers.h"
 //================================ defines =================================
 
 #define ED25519_SIGNATURE_LEN   (64U)
 #define ED25519_PRIVATE_KEY_LEN (32U)
 #define ED25519_PUBLIC_KEY_LEN  (32U)
-#define MAX_FS_NAME             (64U)
+//#define MAX_FS_NAME             (64U)
 //#define MAX_ENTITY_NAME         (32U)
 //#define MAX_SOFTWARE_NAME       (32U)
 //#define MAX_TAG_ID              (32U)
 
-#define IANA_CBOR_COSWID_FILE_FS_NAME_KEY 24
+//#define IANA_CBOR_COSWID_FILE_FS_NAME_KEY 24
 #define IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY 7
 #define IANA_CBOR_COSWID_FILE_KEY 17
 
@@ -44,7 +44,7 @@
 //define CoSWID file 
 typedef struct 
 {
-    char fs_name[MAX_FS_NAME]; //(index 24)
+    //char fs_name[MAX_FS_NAME]; //(index 24)
     uint8_t hash_alg;  
     uint8_t hash_image[HASH_LEN];  //(index 7)
 }file_t;
@@ -288,9 +288,9 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
     *token_size += cborencoder_put_map(&buffer[*token_size], 1); //changeable, one evidence element
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_KEY); 
     *token_size += cborencoder_put_array(&buffer[*token_size], 1); // changeable, one file in the array
-    *token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, two index for the file map
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_FS_NAME_KEY); 
-    *token_size += cborencoder_put_text(&buffer[*token_size], evidence->file.fs_name, strlen(evidence->file.fs_name));
+    *token_size += cborencoder_put_map(&buffer[*token_size], 1); //fixed, one index for the file map
+    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_FS_NAME_KEY); 
+    //*token_size += cborencoder_put_text(&buffer[*token_size], evidence->file.fs_name, strlen(evidence->file.fs_name));
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_HASH_IMAGE_KEY);
     *token_size += cborencoder_put_array(&buffer[*token_size], 2); //fixed, two attributes in hashed value array
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate sha256
@@ -408,7 +408,7 @@ static attestation_status_t edhoc_initial_attest_get_hashed_image (db_partitions
 static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evidence, uint8_t *token_buf, uint8_t *token_size, uint8_t hash[HASH_LEN]){
 
     //strcpy(evidence->file.fs_name, "01drv_attestation-nrf52840dk.bin");
-    strcpy(evidence->file.fs_name, "03app_dotbot-nrf5340dk-app.bin");
+    //strcpy(evidence->file.fs_name, "03app_dotbot-nrf5340dk-app.bin");
     evidence->file.hash_alg = 1;  //fixed, sha256
     memcpy(evidence->file.hash_image, hash, HASH_LEN);
     //evidence->file.size = NULL;
