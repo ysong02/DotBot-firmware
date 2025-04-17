@@ -48,7 +48,9 @@ attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[E
 /**
  * @brief generate a COSE_Sign1 token 
  */
-void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical);
-void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
+void attestation_proposal (EADItemC *ead_attestation_proposal, uint8_t label, bool is_critical);
+void evidence_ead (EADItemC *ead_evidence, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
+void trigger_pp (EADItemC *ead_trigger_pp, uint8_t label, bool is_critical);
+void prepare_mutual_ead_1 (EADItemC *mutual_ead_1, uint8_t label, bool is_critical);
 
 #endif //__ATTESTATION_H

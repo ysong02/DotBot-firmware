@@ -530,25 +530,54 @@ attestation_status_t edhoc_initial_attest_signed_token(const uint8_t *challenge,
     return ATTESTATION_SUCCESS;
 }
 
-void prepare_ead_1 (EADItemC *ead, uint8_t label, bool is_critical){
+void attestation_proposal (EADItemC *ead_attestation_proposal, uint8_t label, bool is_critical){
     uint8_t ret = 0;
-    ead->is_critical = is_critical;
-    ead->label = label;
-    ret += cborencoder_put_array(&ead->value.content[ret], 1);
-    ret += cborencoder_put_unsigned(&ead->value.content[ret], PROVIDED_EVIDENCE_TYPE);
-    ead->value.len = ret;
-                for(uint8_t i = 0; i < ead->value.len; i++) {
-                printf("%02x", ead->value.content[i]);
-            }
-            printf("\n");
+    ead_attestation_proposal->is_critical = is_critical;
+    ead_attestation_proposal->label = label;
+    //an array of 1 value inside
+    ret += cborencoder_put_array(&ead_attestation_proposal->value.content[ret], 1);
+    //put the value of 258 which is the provided evidence type value
+    ret += cborencoder_put_unsigned(&ead_attestation_proposal->value.content[ret], PROVIDED_EVIDENCE_TYPE);
+    ead_attestation_proposal->value.len = ret;
+    for(uint8_t i = 0; i < ead_attestation_proposal->value.len; i++) {
+    printf("%02x", ead_attestation_proposal->value.content[i]);
+        }
+    printf("\n");
 } 
 
-void prepare_ead_3 (EADItemC *ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
-    ead_3->is_critical = is_critical;
-    ead_3->label = label;
-    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_3->value.content, token_size);
-    ead_3->value.len = *token_size;
+void evidence_ead (EADItemC *ead_evidence, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
+    ead_evidence->is_critical = is_critical;
+    ead_evidence->label = label;
+    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_evidence->value.content, token_size);
+    ead_evidence->value.len = *token_size;
     if (status != 0){
         printf("Attestation token generation: FAIL\n");
         }
+}
+
+void trigger_pp (EADItemC *ead_trigger_pp, uint8_t label, bool is_critical){
+    ead_trigger_pp->is_critical = is_critical;
+    ead_trigger_pp->label = label;
+    ead_trigger_pp->value.len = 0;
+}
+
+void prepare_mutual_ead_1(EADItemC *mutual_ead_1, uint8_t label, bool is_critical){
+    uint8_t ret = 0;
+    EADItemC ead_attestation_proposal = {0}, ead_trigger_pp = {0};
+    mutual_ead_1->is_critical = is_critical;
+    mutual_ead_1->label = label;
+    attestation_proposal(&ead_attestation_proposal, 1, true);
+    trigger_pp(&ead_trigger_pp, 2, true);
+    // two elements (two ead items) in the array
+    ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 2);
+    // two elements in ead_attestation_proposal
+    ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 2);    
+    ret += cborencoder_put_unsigned(&mutual_ead_1->value.content[ret], 1);
+    memcpy(&mutual_ead_1->value.content[ret], ead_attestation_proposal.value.content, ead_attestation_proposal.value.len);
+    ret += ead_attestation_proposal.value.len;
+    // two elements in ead_trigger_pp
+    ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 2);
+    ret += cborencoder_put_unsigned(&mutual_ead_1->value.content[ret], 2);
+    ret += cborencoder_put_null(&mutual_ead_1->value.content[ret]);
+    mutual_ead_1->value.len = ret;
 }
