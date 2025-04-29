@@ -28,7 +28,7 @@
 //#define IANA_CBOR_COSWID_ENTITY_ROLE  33
 
 //#define IANA_CBOR_COSWID_TAG_ID_KEY  0
-#define IANA_CBOR_COSWID_TAG_VERSION_KEY 12
+//#define IANA_CBOR_COSWID_TAG_VERSION_KEY 12
 //#define IANA_CBOR_COSWID_SOFTWARE_NAME_KEY  1
 //#define IANA_CBOR_COSWID_ENTITY_KEY  2
 #define IANA_CBOR_COSWID_EVIDENCE_KEY  3
@@ -66,7 +66,7 @@ typedef struct
 typedef struct 
 {
     //char tag_id[MAX_TAG_ID]; //(index 0)
-    uint8_t tag_version;  //(index 12)
+    //uint8_t tag_version;  //(index 12)
     //char software_name[MAX_SOFTWARE_NAME];  //(index 1)
     //entity_t entity;  //(index 2)
     evidence_t evidence; //(index 3)
@@ -93,12 +93,13 @@ typedef struct
 static attestation_status_t status = 0;
 uint8_t hash[HASH_LEN] = {0};
 static evidence_t evidence = {0};
-static measurements_claim_t claim = {0};
+//static measurements_claim_t claim = {0};
 static token_t token = {0};
 static uint8_t signature[ED25519_SIGNATURE_LEN] = {0};
 uint8_t ret;
 uint8_t token_buf[MAX_TOKEN];
 db_partitions_table_t _table = {0};
+uint8_t nonce_pp[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
 
 const uint8_t public_key[32] = {
     0xb2, 0x4f, 0x6d, 0x4e, 0x5f, 0x81, 0x47, 0xaf, 0x1d, 0x1c, 0xd8, 0xc2, 0x6e, 0x1a, 0x51, 0x0b, 0x7a, 0x0f, 0x7f, 0x0a, 0x7b, 0xcc, 0x60, 0x68, 0x89, 0x55, 0xd3, 0x27, 0xb9, 0x9c, 0x64, 0x75
@@ -106,6 +107,10 @@ const uint8_t public_key[32] = {
 
 const uint8_t private_key[32] = {
     0xf3, 0x8f, 0x0d, 0xd6, 0x13, 0x62, 0x06, 0x3c, 0xd7, 0xa1, 0xdf, 0x84, 0x6b, 0x8a, 0x56, 0x2e, 0x9c, 0x60, 0x55, 0x80, 0xe9, 0x95, 0xed, 0xe9, 0x5f, 0x64, 0x47, 0xc5, 0x04, 0x44, 0x96, 0x87
+};
+
+const uint8_t public_key_verifier[32] = {
+    0x24, 0x63, 0xf9, 0xd5, 0xe6, 0x1b, 0x84, 0x68, 0x9b, 0x3b, 0x19, 0xae, 0x10, 0xa3, 0xd6, 0xb5, 0xbf, 0xd1, 0xe6, 0x9a, 0x64, 0x3d, 0x70, 0x61, 0xac, 0xa4, 0xd0, 0x4f, 0x7f, 0xd9, 0x8d, 0xb9
 };
 
 //================================ private =================================
@@ -262,29 +267,25 @@ uint8_t cbor_decode_bytestring(uint8_t *buffer, uint8_t *output, uint8_t *length
 }
 
 /**
- * @brief decode the ead_2 (attestation request) and get the value of evidence type and nonce
+ * generate a nonce for passport model
  */
-uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decoded_bytes, uint8_t *decoded_length) {
-    uint8_t index = 0;
-    uint8_t first_byte = buffer[index++];
-    if (first_byte != 0x82 ){
-        return -1;
-        }
-    index += cbor_decode_unsigned(buffer+index, decoded_integer);
-    if (index == 0) {
-        return -1;  
+void generate_nonce(uint8_t *nonce_pp, uint8_t length) {
+    srand(1234);
+    printf("start generating nonce:\n");
+    for (uint8_t i = 0; i<length; i++) {
+        nonce_pp[i] = (uint8_t)rand();
+        printf("%02x", nonce_pp[i]);
     }
-    index += cbor_decode_bytestring(buffer+index, decoded_bytes, decoded_length);
-    if (index == 0) {
-        return -2; 
-    }
-    return 0;
 }
 
 /**
  * @brief get the encoding format of evidence
  */
 static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer, evidence_t *evidence, uint8_t *token_size){
+    // move the measurements claim here
+    *token_size += cborencoder_put_map(&buffer[*token_size], 1);
+    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_EVIDENCE_KEY); 
+
     *token_size += cborencoder_put_map(&buffer[*token_size], 1); //changeable, one evidence element
     *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_FILE_KEY); 
     *token_size += cborencoder_put_array(&buffer[*token_size], 1); // changeable, one file in the array
@@ -308,31 +309,31 @@ static attestation_status_t edhoc_initial_attest_encode_evidence(uint8_t *buffer
 /**
  * @brief get the encoding format 
  */
-static attestation_status_t edhoc_initial_attest_encode_measurements(uint8_t *buffer, measurements_claim_t *measurements, uint8_t *token_size){
-    *token_size += cborencoder_put_map(&buffer[*token_size], 2);  //fixed, 5 elements in measurements claim
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_ID_KEY);
-    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.tag_id, strlen(measurements->coswid.tag_id));
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_SOFTWARE_NAME_KEY);
-    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.software_name, strlen(measurements->coswid.software_name));
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_KEY);
-    //*token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 elements in entity
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY);
-    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.entity.entity_name, strlen(measurements->coswid.entity.entity_name));
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ROLE);
-    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate tag creator 
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_VERSION_KEY);
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], measurements->coswid.tag_version); //changeable when the attestation service is recalled, fix to 0 for onboarding check
+//static attestation_status_t edhoc_initial_attest_encode_measurements(uint8_t *buffer, measurements_claim_t *measurements, uint8_t *token_size){
+//    *token_size += cborencoder_put_map(&buffer[*token_size], 1);  //fixed, 5 elements in measurements claim
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_ID_KEY);
+//    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.tag_id, strlen(measurements->coswid.tag_id));
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_SOFTWARE_NAME_KEY);
+//    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.software_name, strlen(measurements->coswid.software_name));
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_KEY);
+//    //*token_size += cborencoder_put_map(&buffer[*token_size], 2); //fixed, 2 elements in entity
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ENTITY_NAME_KEY);
+//    //*token_size += cborencoder_put_text(&buffer[*token_size], measurements->coswid.entity.entity_name, strlen(measurements->coswid.entity.entity_name));
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_ENTITY_ROLE);
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], 1); //fixed, indicate tag creator 
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_TAG_VERSION_KEY);
+//    //*token_size += cborencoder_put_unsigned(&buffer[*token_size], measurements->coswid.tag_version); //changeable when the attestation service is recalled, fix to 0 for onboarding check
     
-    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_EVIDENCE_KEY); 
+//    *token_size += cborencoder_put_unsigned(&buffer[*token_size], IANA_CBOR_COSWID_EVIDENCE_KEY); 
      
-    if (*token_size != 0){
-        return ATTESTATION_SUCCESS;
-    }
-    else{
-        return ATTESTATION_ERROR_CBOR_ENCODING;
-    }     
+//    if (*token_size != 0){
+//        return ATTESTATION_SUCCESS;
+//    }
+//    else{
+//        return ATTESTATION_ERROR_CBOR_ENCODING;
+//    }     
 
-}
+//}
 
 /**
  * @brief get the encoding format 
@@ -423,32 +424,32 @@ static attestation_status_t edhoc_initial_attest_evidence_cbor (evidence_t *evid
 /**
  * @brief fill measurements Claim: using swid+cbor
  */
-static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements_claim_t *claim, uint8_t *token_buf, uint8_t *token_size){
-    claim->content_format_id = IANA_COAP_CONTENT_FORMATS_SWID;
-    //strcpy(claim->coswid.tag_id, "aaa");
-    //strcpy(claim->coswid.tag_id, "");
-    claim->coswid.tag_version = 0;
-    //strcpy(claim->coswid.software_name, "DotBot firmware image 1");
-    //strcpy(claim->coswid.software_name, "DotBot");
-    //strcpy(claim->coswid.entity.entity_name, "Attester");
-    //strcpy(claim->coswid.entity.entity_name, "");
-    //claim->coswid.entity.role = 1;
+//static attestation_status_t edhoc_initial_attest_measurements_cbor (measurements_claim_t *claim, uint8_t *token_buf, uint8_t *token_size){
+//    //claim->content_format_id = IANA_COAP_CONTENT_FORMATS_SWID;
+//    //strcpy(claim->coswid.tag_id, "aaa");
+//    //strcpy(claim->coswid.tag_id, "");
+//    //claim->coswid.tag_version = 0;
+//    //strcpy(claim->coswid.software_name, "DotBot firmware image 1");
+//    //strcpy(claim->coswid.software_name, "DotBot");
+//    //strcpy(claim->coswid.entity.entity_name, "Attester");
+//    //strcpy(claim->coswid.entity.entity_name, "");
+//    //claim->coswid.entity.role = 1;
          
-    if (claim == NULL){
-        return ATTESTATION_ERROR_MEASUREMENTS;
-    }
-    else{
-        return edhoc_initial_attest_encode_measurements(token_buf, claim, token_size);
-    }
+//    if (claim == NULL){
+//        return ATTESTATION_ERROR_MEASUREMENTS;
+//    }
+//    else{
+//        //return edhoc_initial_attest_encode_measurements(token_buf, claim, token_size);    
+//    }
 
-}
+//}
 
 /**
  * @brief collect other infos then create the payload in CBOR
  */
 static attestation_status_t edhoc_initial_attest_token_payload (const uint8_t challenge[8], size_t challenge_size, token_t *token, uint8_t *token_buf, uint8_t *token_size){
     //memcpy(token->ueid, "DotBot2", strlen("DotBot2"));
-    memcpy(token->ueid, "momo", strlen("momo"));
+    memcpy(token->ueid, "m", strlen("m"));
     memcpy(token->nonce, challenge, challenge_size);
 
     if (token == NULL){
@@ -514,7 +515,7 @@ attestation_status_t edhoc_initial_attest_signed_token(const uint8_t *challenge,
 
     //payload encoded in CBOR to be a bstr
     status = edhoc_initial_attest_token_payload(challenge, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8, &token, pre_token_buf, &payload_size);
-    status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
+    //status = edhoc_initial_attest_measurements_cbor(&claim, pre_token_buf, &payload_size);
     status = edhoc_initial_attest_get_hashed_image(&_table, hash, &image_size);
     status = edhoc_initial_attest_evidence_cbor(&evidence, pre_token_buf, &payload_size, hash); 
 
@@ -545,16 +546,6 @@ void attestation_proposal (EADItemC *ead_attestation_proposal, uint8_t label, bo
     printf("\n");
 } 
 
-void evidence_ead (EADItemC *ead_evidence, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
-    ead_evidence->is_critical = is_critical;
-    ead_evidence->label = label;
-    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_evidence->value.content, token_size);
-    ead_evidence->value.len = *token_size;
-    if (status != 0){
-        printf("Attestation token generation: FAIL\n");
-        }
-}
-
 void trigger_pp (EADItemC *ead_trigger_pp, uint8_t label, bool is_critical){
     ead_trigger_pp->is_critical = is_critical;
     ead_trigger_pp->label = label;
@@ -568,16 +559,146 @@ void prepare_mutual_ead_1(EADItemC *mutual_ead_1, uint8_t label, bool is_critica
     mutual_ead_1->label = label;
     attestation_proposal(&ead_attestation_proposal, 1, true);
     trigger_pp(&ead_trigger_pp, 2, true);
-    // two elements (two ead items) in the array
-    ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 2);
-    // two elements in ead_attestation_proposal
-    ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 2);    
+    // four elements (two ead labels and two ead value) in the array
+    //ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 4);
+    // label in ead_attestation_proposal   
     ret += cborencoder_put_unsigned(&mutual_ead_1->value.content[ret], 1);
+    // ead value in ead_attestation_proposal
     memcpy(&mutual_ead_1->value.content[ret], ead_attestation_proposal.value.content, ead_attestation_proposal.value.len);
     ret += ead_attestation_proposal.value.len;
-    // two elements in ead_trigger_pp
-    ret += cborencoder_put_array(&mutual_ead_1->value.content[ret], 2);
+    // label and value in ead_trigger_pp
     ret += cborencoder_put_unsigned(&mutual_ead_1->value.content[ret], 2);
     ret += cborencoder_put_null(&mutual_ead_1->value.content[ret]);
     mutual_ead_1->value.len = ret;
+}
+
+/**
+ * @brief decode the ead_2 (attestation request) and get the value of evidence type and nonce
+ */
+uint8_t decode_attestation_request(uint8_t *buffer, uint8_t *decoded_nonce, uint8_t *decoded_nonce_length) {
+    uint8_t index = 0;
+    uint32_t decoded_evidence_type;
+    //uint8_t first_byte = buffer[index++];
+    index ++;
+    index += cbor_decode_unsigned(buffer+index, &decoded_evidence_type);
+    index += cbor_decode_bytestring(buffer+index, decoded_nonce, decoded_nonce_length);
+    if ((index == 0) ||(decoded_evidence_type != PROVIDED_EVIDENCE_TYPE)){
+        return -1;
+    }
+    return index; 
+}
+
+uint8_t decode_mutual_attestation_ead_2 (uint8_t *buffer, uint8_t *decoded_nonce, uint8_t *decoded_nonce_length, uint32_t *decoded_verifierID){
+    uint8_t index = 0;
+    //uint8_t attestation_request_label;
+    //uint8_t result_proposal_label;
+    uint32_t keyID;
+    //index += cbor_decode_unsigned(buffer+index, &attestation_request_label);    
+    index ++;
+    index += decode_attestation_request(buffer +index, decoded_nonce, decoded_nonce_length);
+    printf("decoded nonce is :");
+    for (uint8_t i = 0; i < *decoded_nonce_length; i++) {
+        printf("%02x", decoded_nonce[i]);
+    
+    }
+    printf("\n");
+    //index += cbor_decode_unsigned(buffer+index, &result_proposal_label);
+    //skip the array and map cbor encoding
+    index += 3;
+    index += cbor_decode_unsigned(buffer+index, &keyID);
+    index += cbor_decode_unsigned(buffer+index, decoded_verifierID);
+    printf("keyID is %d, verifierID is: %d\n", keyID, *decoded_verifierID);    
+    return index;
+}
+
+void evidence_ead (EADItemC *ead_evidence, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
+    ead_evidence->is_critical = is_critical;
+    ead_evidence->label = label;
+    attestation_status_t status = edhoc_initial_attest_signed_token(decoded_nonce, ead_evidence->value.content, token_size);
+    ead_evidence->value.len = *token_size;
+    if (status != 0){
+        printf("Attestation token generation: FAIL\n");
+        }
+}
+
+void result_request(EADItemC *ead_result_request, uint8_t label, bool is_critical){
+
+    generate_nonce(nonce_pp, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8);
+    uint8_t ret = 0;
+    ret += cborencoder_put_map(&ead_result_request->value.content[ret], 1);
+    ret += cborencoder_put_unsigned(&ead_result_request->value.content[ret], 4);
+    ret += cborencoder_put_unsigned(&ead_result_request->value.content[ret], 1);
+    ret += cborencoder_put_bytes(&ead_result_request->value.content[ret], nonce_pp, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8);
+    ead_result_request->label = label;
+    ead_result_request->is_critical = is_critical;
+    ead_result_request->value.len = ret;
+}
+
+void prepare_mutual_ead_3(EADItemC *mutual_ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size){
+    uint8_t ret = 0;
+    EADItemC ead_evidence = {0}, ead_result_request = {0};
+    mutual_ead_3->is_critical = is_critical;
+    mutual_ead_3->label = label;
+    evidence_ead(&ead_evidence, 1, true, decoded_nonce, token_size);
+    ret += cborencoder_put_unsigned(&mutual_ead_3->value.content[ret], 1);
+    memcpy(&mutual_ead_3->value.content[ret], ead_evidence.value.content, ead_evidence.value.len);
+    ret += ead_evidence.value.len;
+    result_request(&ead_result_request, 2, true);
+    ret += cborencoder_put_unsigned(&mutual_ead_3->value.content[ret], 2);
+    memcpy(&mutual_ead_3->value.content[ret], ead_result_request.value.content,ead_result_request.value.len);
+    ret += ead_result_request.value.len;
+    printf("ret is %d\n", ret);
+    mutual_ead_3->value.len = ret;
+    *token_size = ret;
+}
+
+// a dirty but super fast way for handling ead_4
+uint8_t decode_ead_4 (uint8_t *buffer){
+    uint8_t cose_payload[34];
+    memcpy(cose_payload, &buffer[9], 34);
+    uint8_t nonce_received[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8];
+    memcpy(nonce_received, &cose_payload[17], EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8);
+    uint8_t signature[ED25519_SIGNATURE_LEN];
+    memcpy(signature, &buffer[45], ED25519_SIGNATURE_LEN);
+    //for(uint8_t i = 0; i<ED25519_SIGNATURE_LEN; i++){
+    //    printf("%02x",signature[i]);
+    //}
+    //printf("\n");
+    uint8_t result = cose_payload[33];
+
+    // check the signature
+    uint8_t sig_structure = 0;
+    uint8_t sig_structure_cbor[MAX_TOKEN];
+    sig_structure += cborencoder_put_array(&sig_structure_cbor[sig_structure], 4); //fixed, 4 elements in the array
+    sig_structure += cborencoder_put_text(&sig_structure_cbor[sig_structure], "Signature1", strlen("Signature1")); //fixed, use COSE_Sign1
+
+    //get protected header in bytes
+    uint8_t protected_header_index = 0;
+    uint8_t protected_header[3];
+    protected_header_index += cborencoder_put_map(&protected_header[protected_header_index], 1);  //fixed, one element in protected header
+    protected_header_index += cborencoder_put_unsigned(&protected_header[protected_header_index], IANA_COSE_HEADER_PARAMETERS_ALG);
+    protected_header_index += cborencoder_put_negative(&protected_header[protected_header_index], -8);  //changeable, now we use EdDSA which is -8
+    //protected header in sig_structure
+    sig_structure += cborencoder_put_bytes(&sig_structure_cbor[sig_structure], protected_header, protected_header_index);
+    sig_structure += cborencoder_put_bytes(&sig_structure_cbor[sig_structure], NULL, 0); //external_aad
+    //add payload to sig_structure
+    sig_structure += cborencoder_put_bytes(&sig_structure_cbor[sig_structure], cose_payload, 34);
+    //memcpy(&sig_structure_cbor[sig_structure], &cose_payload, 34);
+    //sig_structure += 34;
+    printf("sig_structure in cbor is:\n");
+    for(uint8_t i = 0; i<sig_structure; i++){
+        printf("%02x",sig_structure_cbor[i]);
+    }
+    printf("\n");
+ 
+    if (! crypto_ed25519_verify(signature, ED25519_SIGNATURE_LEN, sig_structure_cbor, sig_structure, public_key_verifier)){
+        result = 2;
+        printf("signature check: fail\n");
+    } else {printf("Signature check: success\n");}
+    // check the nonce
+    if (memcmp(nonce_received, nonce_pp, EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8) != 0){
+    printf("nonce check: fail\n");
+    result = 2;
+    } else {printf("nonce check: success\n");}
+    return result;
 }

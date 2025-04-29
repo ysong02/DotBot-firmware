@@ -16,6 +16,7 @@
 #define HASH_LEN (32u)
 #define MAX_UEID (33u)
 #define MAX_TOKEN              (500U)
+#define FRAGMENT_SIZE 64
 
 ///< attestation status enumeration
 typedef enum {
@@ -32,25 +33,41 @@ typedef enum {
     } attestation_status_t;
            
 //================================ functions =================================
-
-uint8_t cborencoder_put_array(uint8_t *buffer, uint8_t elements);
-uint8_t cborencoder_put_unsigned(uint8_t *buffer, unsigned long value);
 /**
  * @brief encode the array an bytes in CBOR, and return a int indicating the length of cbor output
  */
-
-uint8_t decode_ead_2(uint8_t *buffer, uint32_t *decoded_integer, uint8_t *decoded_bytes, uint8_t *decoded_length);
-/**
- * @brief decode the ead_2 and get the value of selected evidence type and nonce
- */
-
-attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8], uint8_t *token_buf, uint8_t *token_size);
+uint8_t cborencoder_put_array(uint8_t *buffer, uint8_t elements);
+uint8_t cborencoder_put_unsigned(uint8_t *buffer, unsigned long value);
 /**
  * @brief generate a COSE_Sign1 token 
  */
+attestation_status_t edhoc_initial_attest_signed_token(const uint8_t challenge[EDHOC_INITIAL_ATTEST_CHALLENGE_SIZE_8], uint8_t *token_buf, uint8_t *token_size);
+
+/**
+ * @brief generate/process ead items in lake-ra
+ */
 void attestation_proposal (EADItemC *ead_attestation_proposal, uint8_t label, bool is_critical);
-void evidence_ead (EADItemC *ead_evidence, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
+
 void trigger_pp (EADItemC *ead_trigger_pp, uint8_t label, bool is_critical);
+
 void prepare_mutual_ead_1 (EADItemC *mutual_ead_1, uint8_t label, bool is_critical);
+
+/**
+ * @brief decode the attestation_request and get the value of selected evidence type and nonce
+ */
+uint8_t decode_attestation_request(uint8_t *buffer, uint8_t *decoded_nonce, uint8_t *decoded_nonce_length);
+uint8_t decode_mutual_attestation_ead_2 (uint8_t *buffer, uint8_t *decoded_nonce, uint8_t *decoded_nonce_length, uint32_t *decoded_verifierID);
+
+/**
+ * @brief ead_3
+ */
+void evidence_ead (EADItemC *ead_evidence, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
+void result_request(EADItemC *ead_result_request, uint8_t label, bool is_critical);
+
+void prepare_mutual_ead_3 (EADItemC *mutual_ead_3, uint8_t label, bool is_critical, uint8_t *decoded_nonce, uint8_t *token_size);
+
+uint8_t decode_ead_4 (uint8_t *buffer);
+
+//void send_fragmented_message(uint8_t *message, size_t message_len, uint8_t c_r)
 
 #endif //__ATTESTATION_H

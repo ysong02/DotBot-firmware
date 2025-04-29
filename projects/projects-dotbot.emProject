@@ -1,6 +1,8 @@
 <!DOCTYPE CrossStudio_Project_File>
 <solution Name="projects-dotbot" target="8" version="2">
-  <configuration Name="Debug" c_preprocessor_definitions="CRYPTO_PSA" />
+  <configuration
+    Name="Debug"
+    c_preprocessor_definitions="CRYPTO_PSA;_MAX_KDF_CONTENT_LEN_384;_MAX_BUFFER_LEN_384" />
   <project Name="03app_dotbot">
     <configuration
       Name="Common"
@@ -10,7 +12,7 @@
     <configuration
       Name="Debug"
       c_preprocessor_definitions="CRYPTO_ PSA"
-      linker_additional_files="C:\\Users\\yusong\\Downloads\\lakers\\target\\thumbv7em-none-eabihf\\release\\liblakers_c.a"
+      linker_additional_files="C:\\Users\\yusong\\Downloads\\lakers\\target\\thumbv7em-none-eabihf\\debug\\liblakers_c.a"
       linker_output_format="bin" />
     <configuration
       Name="Release"
